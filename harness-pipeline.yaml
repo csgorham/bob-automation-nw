@@ -154,7 +154,8 @@ pipeline:
                           echo "Fetching HCP Terraform token from Vault..."
 
                           # Use static token (dynamic tokens lack workspace access)
-                          HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform 2>/dev/null)
+                          echo "DEBUG: VAULT_ADDR=$VAULT_ADDR VAULT_NAMESPACE=$VAULT_NAMESPACE"
+                          HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
                           [ -z "$HCP_TOKEN" ] && { echo "✗ Failed to get token from Vault"; exit 1; }
                           echo "✓ Terraform Cloud token obtained"
 
