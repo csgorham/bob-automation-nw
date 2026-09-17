@@ -1,0 +1,188 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# terraform/ec2/ports.yaml
+# Golden Workflow — Authoritative Ingress Port Catalog
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# PURPOSE
+#   This file is the single source of truth for ALL ingress ports that may be
+#   opened on EC2 instances in any environment.  It is:
+#     • Human-readable reference — explains *why* each port exists.
+#     • Bob-mutation target — Bob reads and edits this file when a developer
+#       requests "add port X" or "remove SSH".
+#     • Governance boundary — ports not listed here are NEVER added to an
+#       *.auto.tfvars ingress_ports block.
+#
+# HOW IT IS CONSUMED
+#   Terraform does NOT yamldecode() this file directly; actual open ports for
+#   each environment are declared in the corresponding *.auto.tfvars file under
+#   the `ingress_ports` key.  Bob cross-references this catalog when evaluating
+#   a change request to ensure:
+#     1. The requested port has an approved entry here.
+#     2. The `risk_level` is acceptable for the target environment.
+#     3. Any `requires_justification: true` ports are flagged for human review.
+#
+# SCHEMA (per entry)
+#   port                  : integer  — TCP port number (1–65535)
+#   protocol              : string   — "tcp" | "udp" | "icmp" (default: "tcp")
+#   description           : string   — Short human-readable label
+#   service               : string   — Canonical service / protocol name
+#   risk_level            : string   — "low" | "medium" | "high"
+#   allowed_environments  : list     — Environments where this port may appear
+#                                      ["dev","sandbox","uat","alpha","prod"]
+#                                      Use ["*"] to allow all environments.
+#   cidr_default          : string   — Default CIDR when added via Bob
+#                                      Best practice: use a restricted CIDR in prod.
+#   requires_justification: boolean  — If true Bob will prompt for a ticket/reason
+#                                      before writing this port to a tfvars file.
+#   notes                 : string   — Optional extended context / warnings
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+schema_version: "1.1"
+
+ingress_ports:
+
+  # ── REMOTE ACCESS ──────────────────────────────────────────────────────────
+  - port: 22
+    protocol: tcp
+    description: "SSH — remote shell access"
+    service: "SSH"
+    risk_level: high
+    allowed_environments: ["dev", "sandbox", "uat", "alpha"]
+    cidr_default: "0.0.0.0/0"
+    requires_justification: true
+    notes: >
+      Never open SSH to 0.0.0.0/0 in production without explicit approval.
+      Prefer a bastion host or VPN-restricted CIDR (e.g. 10.0.0.0/8).
+
+  # ── WEB / HTTP ─────────────────────────────────────────────────────────────
+  - port: 80
+    protocol: tcp
+    description: "HTTP — unencrypted web traffic"
+    service: "HTTP"
+    risk_level: low
+    allowed_environments: ["*"]
+    cidr_default: "0.0.0.0/0"
+    requires_justification: false
+    notes: >
+      HTTP should redirect to HTTPS in production.  Acceptable for dev and
+      health-check endpoints on internal load balancers.
+
+  - port: 443
+    protocol: tcp
+    description: "HTTPS — TLS-encrypted web traffic"
+    service: "HTTPS"
+    risk_level: low
+    allowed_environments: ["*"]
+    cidr_default: "0.0.0.0/0"
+    requires_justification: false
+    notes: "Standard TLS endpoint. Always prefer this over port 80 in production."
+
+  - port: 8443
+    protocol: tcp
+    description: "HTTPS alternate — TLS on non-standard port"
+    service: "HTTPS-Alt"
+    risk_level: low
+    allowed_environments: ["*"]
+    cidr_default: "0.0.0.0/0"
+    requires_justification: false
+    notes: >
+      Common TLS alternate used by internal services, reverse proxies, and
+      demo workloads.  Acceptable in all environments; prefer port 443 in prod
+      unless the service explicitly requires 8443.
+
+  # ── ALTERNATE / DEV HTTP ───────────────────────────────────────────────────
+  - port: 3000
+    protocol: tcp
+    description: "Node.js / React dev server"
+    service: "Dev-HTTP"
+    risk_level: medium
+    allowed_environments: ["dev", "sandbox"]
+    cidr_default: "0.0.0.0/0"
+    requires_justification: false
+    notes: "Typical frontend dev server port.  Not for production use."
+
+  - port: 8080
+    protocol: tcp
+    description: "HTTP alternate — common app-server port"
+    service: "HTTP-Alt"
+    risk_level: medium
+    allowed_environments: ["dev", "sandbox", "uat", "alpha"]
+    cidr_default: "0.0.0.0/0"
+    requires_justification: false
+    notes: "Used by Tomcat, Jenkins, and many containerised app servers."
+
+  - port: 8081
+    protocol: tcp
+    description: "HTTP alternate 2 — secondary app port"
+    service: "HTTP-Alt2"
+    risk_level: medium
+    allowed_environments: ["dev", "sandbox", "uat"]
+    cidr_default: "0.0.0.0/0"
+    requires_justification: false
+    notes: "Secondary service port; confirm with team before adding to UAT."
+
+  - port: 8082
+    protocol: tcp
+    description: "HTTP alternate 3 — dev tooling port"
+    service: "HTTP-Alt3"
+    risk_level: medium
+    allowed_environments: ["dev", "sandbox"]
+    cidr_default: "0.0.0.0/0"
+    requires_justification: false
+    notes: "Used in dev.auto.tfvars for development tooling endpoints."
+
+  - port: 8083
+    protocol: tcp
+    description: "HTTP alternate 4 — additional service port"
+    service: "HTTP-Alt4"
+    risk_level: medium
+    allowed_environments: ["dev", "sandbox", "uat"]
+    cidr_default: "0.0.0.0/0"
+    requires_justification: false
+    notes: "Reserve for microservice sidecars or proxy services."
+
+  # ── MONITORING & METRICS ───────────────────────────────────────────────────
+  - port: 9090
+    protocol: tcp
+    description: "Prometheus metrics scrape endpoint"
+    service: "Prometheus"
+    risk_level: medium
+    allowed_environments: ["dev", "sandbox", "uat", "alpha"]
+    cidr_default: "10.0.0.0/8"
+    requires_justification: false
+    notes: >
+      Restrict to internal CIDR only.  Expose on 0.0.0.0/0 only if a
+      reverse-proxy sits in front.
+
+  - port: 9100
+    protocol: tcp
+    description: "Prometheus Node Exporter"
+    service: "Node-Exporter"
+    risk_level: medium
+    allowed_environments: ["dev", "sandbox", "uat"]
+    cidr_default: "10.0.0.0/8"
+    requires_justification: false
+    notes: "Should only be reachable from Prometheus server CIDR."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BOB MUTATION RULES
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# When Bob receives a developer request to add or remove a port:
+#
+#   ADD FLOW
+#   1. Check catalog above — if port is absent, refuse and suggest adding it here
+#      first (with a risk_level and allowed_environments set by the team lead).
+#   2. Verify target environment is in allowed_environments (or catalog has "*").
+#   3. If requires_justification is true, prompt for JIRA/GitHub issue number.
+#   4. Apply to the correct *.auto.tfvars ingress_ports block.
+#   5. Echo back the diff and proposed `terraform plan -target` command.
+#
+#   REMOVE FLOW
+#   1. Confirm the port exists in the target tfvars.
+#   2. Warn if the port is still referenced by a running service (check notes).
+#   3. Remove from the *.auto.tfvars ingress_ports block.
+#   4. Echo back the diff.
+#
+# ─────────────────────────────────────────────────────────────────────────────

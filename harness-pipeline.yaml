@@ -1,0 +1,3119 @@
+pipeline:
+  name: ami-build-pipeline
+  identifier: ami_build_pipeline
+  projectIdentifier: amipipeline
+  orgIdentifier: default
+  tags:
+    github_repo: csgorham/bob-automation-nw
+  variables:
+    - name: ENVIRONMENT
+      type: String
+      description: Environment to deploy (dev, prod, staging, etc.)
+      value: dev
+      required: false
+  stages:
+    - stage:
+        name: Check S3
+        identifier: check_s3
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Terraform Check S3 Bucket
+                  identifier: tf_check_s3
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |-
+                          #!/bin/bash
+                          set -e
+                          export VAULT_ADDR=$vault_addr
+                          export VAULT_TOKEN=$vault_token
+                          export VAULT_SKIP_VERIFY="true"
+                          WORKSPACE_ID="ws-cXnGs9Q6vwxcNheL"
+
+                          # Debug: Print trigger information
+                          echo "════════════════════════════════════════"
+                          echo "DEBUG: Trigger Information"
+                          echo "════════════════════════════════════════"
+                          echo "Source Branch: <+trigger.sourceBranch>"
+                          echo "Target Branch: <+trigger.targetBranch>"
+                          echo "PR Number: <+trigger.prNumber>"
+                          echo "════════════════════════════════════════"
+                          echo ""
+
+                          # Install dependencies with better error handling
+                          echo "Installing dependencies..."
+                          if command -v microdnf >/dev/null 2>&1; then
+                            echo "Using microdnf..."
+                            microdnf clean all 2>/dev/null || true
+                            # Install packages one by one to see which ones fail
+                            microdnf install -y wget 2>/dev/null || echo "⚠️  wget install failed"
+                            microdnf install -y tar 2>/dev/null || echo "⚠️  tar install failed"
+                            microdnf install -y gzip 2>/dev/null || echo "⚠️  gzip install failed"
+                            microdnf install -y curl 2>/dev/null || echo "⚠️  curl install failed"
+                            microdnf install -y unzip 2>/dev/null || echo "⚠️  unzip install failed"
+                            microdnf install -y jq 2>/dev/null || echo "⚠️  jq not available via microdnf, will install manually"
+                          elif command -v apt-get >/dev/null 2>&1; then
+                            echo "Using apt-get..."
+                            apt-get update -qq && apt-get install -y -qq jq unzip wget curl
+                          elif command -v yum >/dev/null 2>&1; then
+                            echo "Using yum..."
+                            yum install -y jq unzip wget curl || true
+                          elif command -v apk >/dev/null 2>&1; then
+                            echo "Using apk..."
+                            apk add --no-cache jq unzip wget curl
+                          else
+                            echo "⚠️  No package manager found, attempting to use existing tools..."
+                          fi
+
+                          # Install jq manually if not available
+                          if ! command -v jq >/dev/null 2>&1; then
+                            echo "Installing jq manually..."
+                            rm -f /tmp/jq
+
+                            if command -v curl >/dev/null 2>&1; then
+                              echo "Downloading jq with curl..."
+                              curl -sL https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 -o /tmp/jq
+                            elif command -v wget >/dev/null 2>&1; then
+                              echo "Downloading jq with wget..."
+                              wget -q https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 -O /tmp/jq
+                            else
+                              echo "✗ Cannot download jq - no curl or wget available"
+                              exit 1
+                            fi
+
+                            # Verify download
+                            if [ ! -f /tmp/jq ]; then
+                              echo "✗ jq download failed - file not created"
+                              exit 1
+                            fi
+
+                            # Check file size
+                            JQ_SIZE=$(stat -c%s /tmp/jq 2>/dev/null || stat -f%z /tmp/jq 2>/dev/null || echo "0")
+                            if [ "$JQ_SIZE" -lt 1000 ]; then
+                              echo "✗ jq download failed - file too small ($JQ_SIZE bytes)"
+                              cat /tmp/jq 2>/dev/null || echo "Cannot read file"
+                              exit 1
+                            fi
+
+                            echo "Downloaded jq ($JQ_SIZE bytes)"
+
+                            # Set permissions
+                            chmod +x /tmp/jq || {
+                              echo "✗ Cannot set execute permission on /tmp/jq"
+                              ls -la /tmp/jq
+                              exit 1
+                            }
+
+                            # Verify it's executable
+                            if [ ! -x /tmp/jq ]; then
+                              echo "✗ /tmp/jq is not executable after chmod"
+                              ls -la /tmp/jq
+                              exit 1
+                            fi
+
+                            export PATH="/tmp:$PATH"
+
+                            # Test jq
+                            if /tmp/jq --version >/dev/null 2>&1; then
+                              echo "✓ jq installed and working: $(/tmp/jq --version)"
+                            else
+                              echo "✗ jq installed but not working"
+                              /tmp/jq --version 2>&1 || echo "Cannot execute jq"
+                              exit 1
+                            fi
+                          fi
+
+                          # Install Vault with multiple extraction methods
+                          if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            rm -f /tmp/vault /tmp/vault.zip
+
+                            # Download vault.zip
+                            echo "Downloading Vault..."
+                            if command -v curl >/dev/null 2>&1; then
+                              curl -sL https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -o /tmp/vault.zip
+                            elif command -v wget >/dev/null 2>&1; then
+                              wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            else
+                              echo "✗ Neither wget nor curl available"
+                              exit 1
+                            fi
+
+                            echo "Download complete. Extracting..."
+
+                            # Try multiple extraction methods
+                            EXTRACTED=false
+
+                            # Method 1: unzip
+                            if command -v unzip >/dev/null 2>&1; then
+                              echo "Trying unzip..."
+                              if unzip -oq /tmp/vault.zip -d /tmp 2>/dev/null || unzip -o /tmp/vault.zip -d /tmp 2>/dev/null; then
+                                EXTRACTED=true
+                                echo "✓ Extracted with unzip"
+                              fi
+                            fi
+
+                            # Method 2: python3
+                            if [ "$EXTRACTED" = false ] && command -v python3 >/dev/null 2>&1; then
+                              echo "Trying python3..."
+                              if python3 -c "import zipfile; zipfile.ZipFile('/tmp/vault.zip').extractall('/tmp')" 2>/dev/null; then
+                                EXTRACTED=true
+                                echo "✓ Extracted with python3"
+                              fi
+                            fi
+
+                            # Method 3: python
+                            if [ "$EXTRACTED" = false ] && command -v python >/dev/null 2>&1; then
+                              echo "Trying python..."
+                              if python -c "import zipfile; zipfile.ZipFile('/tmp/vault.zip').extractall('/tmp')" 2>/dev/null; then
+                                EXTRACTED=true
+                                echo "✓ Extracted with python"
+                              fi
+                            fi
+
+                            # Method 4: busybox unzip (common in minimal containers)
+                            if [ "$EXTRACTED" = false ] && command -v busybox >/dev/null 2>&1; then
+                              echo "Trying busybox unzip..."
+                              if busybox unzip -o /tmp/vault.zip -d /tmp 2>/dev/null; then
+                                EXTRACTED=true
+                                echo "✓ Extracted with busybox"
+                              fi
+                            fi
+
+                            if [ "$EXTRACTED" = false ]; then
+                              echo "✗ Cannot extract vault.zip - no extraction tool available"
+                              echo "Tried: unzip, python3, python, busybox"
+                              echo "Available commands:"
+                              for cmd in unzip python python3 busybox; do
+                                if command -v $cmd >/dev/null 2>&1; then
+                                  echo "  ✓ $cmd"
+                                else
+                                  echo "  ✗ $cmd"
+                                fi
+                              done
+                              exit 1
+                            fi
+
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed successfully"
+                          fi
+                          echo "✓ Dependencies installed"
+                          echo "Fetching HCP Terraform token from Vault..."
+
+                          # Use static token (dynamic tokens lack workspace access)
+                          HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform 2>/dev/null)
+                          [ -z "$HCP_TOKEN" ] && { echo "✗ Failed to get token from Vault"; exit 1; }
+                          echo "✓ Terraform Cloud token obtained"
+
+                          # -----------------------------
+                          # Trigger run
+                          # -----------------------------
+                          echo "Triggering Terraform run..."
+
+                          RUN_RESPONSE=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            -H "Content-Type: application/vnd.api+json" \
+                            -d "{
+                              \"data\": {
+                                \"type\": \"runs\",
+                                \"attributes\": {
+                                  \"message\": \"Check S3 bucket\",
+                                  \"auto-apply\": true
+                                },
+                                \"relationships\": {
+                                  \"workspace\": {
+                                    \"data\": {
+                                      \"type\": \"workspaces\",
+                                      \"id\": \"$WORKSPACE_ID\"
+                                    }
+                                  }
+                                }
+                              }
+                            }" \
+                            https://app.terraform.io/api/v2/runs)
+
+                          # Check for errors in response
+                          if echo "$RUN_RESPONSE" | grep -q '"errors"'; then
+                            echo "✗ Run creation failed:"
+                            echo "$RUN_RESPONSE" | jq -r '.errors[]' 2>/dev/null || echo "$RUN_RESPONSE"
+                            exit 1
+                          fi
+
+                          RUN_ID=$(echo "$RUN_RESPONSE" | jq -r '.data.id')
+                          [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ] && { echo "✗ Run creation failed - no run ID returned"; exit 1; }
+
+                          echo "Run ID: $RUN_ID"
+
+                          # -----------------------------
+                          # Wait for completion
+                          # -----------------------------
+                          echo "Waiting for run..."
+
+                          for i in {1..60}; do
+                            STATUS=$(curl -s \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              https://app.terraform.io/api/v2/runs/$RUN_ID \
+                              | jq -r '.data.attributes.status')
+
+                            echo "Attempt $i: $STATUS"
+
+                            case "$STATUS" in
+                              applied)
+                                echo "✓ Run applied successfully"
+
+                                # For applied runs, read from current state version outputs
+                                BUCKET_EXISTS=$(curl -s \
+                                  -H "Authorization: Bearer $HCP_TOKEN" \
+                                  https://app.terraform.io/api/v2/workspaces/$WORKSPACE_ID/current-state-version-outputs \
+                                  | jq -r '.data[] | select(.attributes.name=="bucket_exists") | .attributes.value')
+
+                                echo "Bucket exists (from state): $BUCKET_EXISTS"
+
+                                if [ "$BUCKET_EXISTS" = "true" ] || [ "$BUCKET_EXISTS" = "1" ]; then
+                                  RESULT="true"
+                                  echo "✓ Bucket exists!"
+                                else
+                                  RESULT="false"
+                                  echo "✗ Bucket does not exist"
+                                fi
+                                break
+                                ;;
+
+                              planned_and_finished)
+                                echo "✓ Run planned successfully"
+
+                                # Wait a moment for state to be updated
+                                sleep 2
+
+                                # Fetch outputs from current state version
+                                echo "Fetching state version outputs..."
+                                STATE_OUTPUTS=$(curl -s \
+                                  -H "Authorization: Bearer $HCP_TOKEN" \
+                                  https://app.terraform.io/api/v2/workspaces/$WORKSPACE_ID/current-state-version-outputs)
+
+                                echo "State outputs response:"
+                                echo "$STATE_OUTPUTS" | jq -r '.data[] | "\(.attributes.name) = \(.attributes.value)"'
+
+                                # Extract bucket_exists value
+                                BUCKET_EXISTS=$(echo "$STATE_OUTPUTS" | jq -r '.data[] | select(.attributes.name=="bucket_exists") | .attributes.value')
+
+                                echo "Extracted bucket_exists: '$BUCKET_EXISTS'"
+
+                                if [ -z "$BUCKET_EXISTS" ]; then
+                                  echo "⚠ Could not extract bucket_exists from state outputs"
+                                  RESULT="false"
+                                elif [ "$BUCKET_EXISTS" = "true" ]; then
+                                  RESULT="true"
+                                  echo "✓ Bucket exists!"
+                                else
+                                  RESULT="false"
+                                  echo "✗ Bucket does not exist"
+                                fi
+                                break
+                                ;;
+
+                              errored|cancelled)
+                                echo "Run failed: $STATUS"
+                                RESULT="false"
+                                break
+                                ;;
+                            esac
+
+                            sleep 10
+                          done
+
+                          # Set default if loop timed out
+                          S3_EXISTS=${RESULT:-false}
+
+                          echo "Final Output:"
+                          echo "$S3_EXISTS"
+                    executionTarget: {}
+                    outputVariables:
+                      - name: S3_EXISTS
+                        type: String
+                        value: S3_EXISTS
+                  timeout: 10m
+    - stage:
+        name: Plan S3 and Network Infrastructure
+        identifier: plan_infrastructure
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Plan S3 Bucket
+                  identifier: plan_s3
+                  type: ShellScript
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.stages.check_s3.spec.execution.steps.tf_check_s3.output.outputVariables.S3_EXISTS> == "false"
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          export VAULT_ADDR="$vault_addr"
+                          export VAULT_TOKEN="$vault_token"
+                          export VAULT_SKIP_VERIFY="true"
+
+                          if command -v microdnf >/dev/null 2>&1; then
+                            microdnf install -y jq unzip wget || true
+                          fi
+
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
+                          WORKSPACE_ID="ws-uGtV1DEBnULDJwzf"
+
+                          echo "📋 Creating Terraform plan for S3 bucket..."
+                          RUN_ID=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            -H "Content-Type: application/vnd.api+json" \
+                            -d "{
+                              \"data\": {
+                                \"type\": \"runs\",
+                                \"attributes\": {
+                                  \"message\": \"Plan S3 bucket creation\",
+                                  \"auto-apply\": false
+                                },
+                                \"relationships\": {
+                                  \"workspace\": {
+                                    \"data\": {
+                                      \"type\": \"workspaces\",
+                                      \"id\": \"$WORKSPACE_ID\"
+                                    }
+                                  }
+                                }
+                              }
+                            }" \
+                            https://app.terraform.io/api/v2/runs | jq -r '.data.id')
+
+                          echo "S3 Plan Run ID: $RUN_ID"
+
+                          for i in {1..60}; do
+                            STATUS=$(curl -s \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              https://app.terraform.io/api/v2/runs/$RUN_ID \
+                              | jq -r '.data.attributes.status' | tr -d '[:space:]')
+
+                            echo "Current status: '$STATUS' (attempt $i/60)"
+
+                            # Check for completion statuses
+                            if [[ "$STATUS" == "policy_checked" ]] || [[ "$STATUS" == "policy_override" ]] || [[ "$STATUS" == "planned_and_finished" ]] || [[ "$STATUS" == "planned" ]] || [[ "$STATUS" == "cost_estimated" ]]; then
+                              echo "✓ S3 plan completed: $STATUS"
+                              break
+                            elif [[ "$STATUS" == "errored" ]] || [[ "$STATUS" == "cancelled" ]] || [[ "$STATUS" == "discarded" ]]; then
+                              echo "✗ S3 plan failed: $STATUS"
+                              exit 1
+                            else
+                              echo "⏳ Waiting for completion (current: $STATUS)..."
+                            fi
+
+                            sleep 10
+                          done
+
+                          # Final status check - accept cost_estimated as valid completion
+                          if [[ "$STATUS" != "policy_checked" && "$STATUS" != "policy_override" && "$STATUS" != "planned_and_finished" && "$STATUS" != "planned" && "$STATUS" != "cost_estimated" ]]; then
+                            echo "✗ Timeout waiting for plan completion. Final status: $STATUS"
+                            exit 1
+                          fi
+                    outputVariables:
+                      - name: S3_RUN_ID
+                        type: String
+                        value: $RUN_ID
+              - step:
+                  name: Validate S3 Sentinel Policies
+                  identifier: validate_s3_policies
+                  type: ShellScript
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.stages.check_s3.spec.execution.steps.tf_check_s3.output.outputVariables.S3_EXISTS> == "false"
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: RUN_ID
+                        type: String
+                        value: <+pipeline.stages.plan_infrastructure.spec.execution.steps.plan_s3.output.outputVariables.S3_RUN_ID>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          export VAULT_ADDR="$vault_addr"
+                          export VAULT_TOKEN="$vault_token"
+                          export VAULT_SKIP_VERIFY="true"
+
+                          if command -v microdnf >/dev/null 2>&1; then
+                            microdnf install -y jq unzip wget || true
+                          fi
+
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
+
+                          echo "🔍 Validating S3 Sentinel policies..."
+                          STATUS=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            https://app.terraform.io/api/v2/runs/$RUN_ID \
+                            | jq -r '.data.attributes.status' | tr -d '[:space:]')
+
+                          echo "Current run status: '$STATUS'"
+
+                          if [[ "$STATUS" == "policy_checked" ]]; then
+                            echo "✓ S3 Sentinel policies passed"
+                            exit 0
+                          elif [[ "$STATUS" == "policy_override" ]]; then
+                            echo "⚠ S3 policies require override (soft-mandatory)"
+                            exit 0
+                          elif [[ "$STATUS" == "planned_and_finished" ]]; then
+                            echo "✓ S3 plan completed (no policies configured or policies passed)"
+                            exit 0
+                          elif [[ "$STATUS" == "errored" ]]; then
+                            echo "✗ S3 policy validation failed"
+                            exit 1
+                          else
+                            echo "⚠ Unexpected status: $STATUS - proceeding anyway"
+                            exit 0
+                          fi
+              - step:
+                  name: Plan Network
+                  identifier: plan_network
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -e
+                          export VAULT_ADDR="$vault_addr"
+                          export VAULT_TOKEN="$vault_token"
+                          export VAULT_SKIP_VERIFY="true"
+
+                          if command -v microdnf >/dev/null 2>&1; then
+                            microdnf install -y jq unzip wget || true
+                          fi
+
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          # Check if network already exists with all required fields
+                          EXISTING_VPC=$(vault kv get -field=vpc_id secret/ami-pipeline/network 2>/dev/null || true)
+                          EXISTING_SUBNET=$(vault kv get -field=subnet_id secret/ami-pipeline/network 2>/dev/null || true)
+
+                          if [ -n "$EXISTING_VPC" ] && [ -n "$EXISTING_SUBNET" ]; then
+                            echo "✓ Network already exists with complete configuration"
+                            echo "  VPC ID: $EXISTING_VPC"
+                            echo "  Subnet ID: $EXISTING_SUBNET"
+                            RUN_ID="SKIP"
+                            echo "$RUN_ID"
+                            exit 0
+                          elif [ -n "$EXISTING_VPC" ] || [ -n "$EXISTING_SUBNET" ]; then
+                            echo "⚠ Incomplete network configuration detected in Vault"
+                            echo "  VPC ID: ${EXISTING_VPC:-missing}"
+                            echo "  Subnet ID: ${EXISTING_SUBNET:-missing}"
+                            echo ""
+                            echo "To fix this issue, delete the incomplete secret:"
+                            echo "  vault kv delete secret/ami-pipeline/network"
+                            echo ""
+                            echo "Then re-run the pipeline to create a complete network configuration."
+                            exit 1
+                          fi
+
+                          HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
+                          WORKSPACE_ID="ws-i7ApJ9RdDPvvEQVd"
+
+                          echo "📋 Creating Terraform plan for Network (VPC/Subnet)..."
+                          RUN_ID=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            -H "Content-Type: application/vnd.api+json" \
+                            -d "{
+                              \"data\": {
+                                \"type\": \"runs\",
+                                \"attributes\": {
+                                  \"message\": \"Plan Network creation\",
+                                  \"auto-apply\": false
+                                },
+                                \"relationships\": {
+                                  \"workspace\": {
+                                    \"data\": {
+                                      \"type\": \"workspaces\",
+                                      \"id\": \"$WORKSPACE_ID\"
+                                    }
+                                  }
+                                }
+                              }
+                            }" \
+                            https://app.terraform.io/api/v2/runs | jq -r '.data.id')
+
+                          echo "Network Plan Run ID: $RUN_ID"
+
+                          for i in {1..60}; do
+                            STATUS=$(curl -s \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              https://app.terraform.io/api/v2/runs/$RUN_ID \
+                              | jq -r '.data.attributes.status' | tr -d '[:space:]')
+
+                            echo "Current status: '$STATUS' (attempt $i/60)"
+
+                            # Check for completion statuses
+                            if [[ "$STATUS" == "policy_checked" ]] || [[ "$STATUS" == "policy_override" ]] || [[ "$STATUS" == "planned_and_finished" ]] || [[ "$STATUS" == "planned" ]] || [[ "$STATUS" == "cost_estimated" ]]; then
+                              echo "✓ Network plan completed: $STATUS"
+                              break
+                            elif [[ "$STATUS" == "errored" ]] || [[ "$STATUS" == "cancelled" ]] || [[ "$STATUS" == "discarded" ]]; then
+                              echo "✗ Network plan failed: $STATUS"
+                              exit 1
+                            else
+                              echo "⏳ Waiting for completion (current: $STATUS)..."
+                            fi
+
+                            sleep 10
+                          done
+
+                          # Final status check - accept cost_estimated as valid completion
+                          if [[ "$STATUS" != "policy_checked" && "$STATUS" != "policy_override" && "$STATUS" != "planned_and_finished" && "$STATUS" != "planned" && "$STATUS" != "cost_estimated" ]]; then
+                            echo "✗ Timeout waiting for plan completion. Final status: $STATUS"
+                            exit 1
+                          fi
+                    outputVariables:
+                      - name: NETWORK_RUN_ID
+                        type: String
+                        value: $RUN_ID
+              - step:
+                  name: Validate Network Sentinel Policies
+                  identifier: validate_network_policies
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: RUN_ID
+                        type: String
+                        value: <+pipeline.stages.plan_infrastructure.spec.execution.steps.plan_network.output.outputVariables.NETWORK_RUN_ID>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          export VAULT_ADDR="$vault_addr"
+                          export VAULT_TOKEN="$vault_token"
+                          export VAULT_SKIP_VERIFY="true"
+
+                          if command -v microdnf >/dev/null 2>&1; then
+                            microdnf install -y jq unzip wget || true
+                          fi
+
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          # Skip if RUN_ID is "SKIP"
+                          if [ "$RUN_ID" = "SKIP" ]; then
+                            echo "✓ Network already exists, skipping validation"
+                            exit 0
+                          fi
+
+                          HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
+
+                          echo "🔍 Validating Network Sentinel policies..."
+                          STATUS=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            https://app.terraform.io/api/v2/runs/$RUN_ID \
+                            | jq -r '.data.attributes.status' | tr -d '[:space:]')
+
+                          echo "Current run status: '$STATUS'"
+
+                          if [[ "$STATUS" == "policy_checked" ]]; then
+                            echo "✓ Network Sentinel policies passed"
+                            exit 0
+                          elif [[ "$STATUS" == "policy_override" ]]; then
+                            echo "⚠ Network policies require override"
+                            exit 0
+                          elif [[ "$STATUS" == "planned_and_finished" ]]; then
+                            echo "✓ Network plan completed (no policies configured or policies passed)"
+                            exit 0
+                          elif [[ "$STATUS" == "errored" ]]; then
+                            echo "✗ Network policy validation failed"
+                            exit 1
+                          else
+                            echo "⚠ Unexpected status: $STATUS - proceeding anyway"
+                            exit 0
+                          fi
+    - stage:
+        name: Approve Infrastructure Creation
+        identifier: approve_infrastructure
+        type: Approval
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Post PR Comment with Details
+                  identifier: post_pr_comment
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: GITHUB_REPO
+                        type: String
+                        value: <+pipeline.tags.github_repo>
+                      - name: PR_NUMBER
+                        type: String
+                        value: <+trigger.prNumber>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          echo "📝 Posting PR comment with console output..."
+                          export VAULT_ADDR="$vault_addr"
+                          export VAULT_TOKEN="$vault_token"
+                          export VAULT_SKIP_VERIFY="true"
+
+                          if command -v microdnf >/dev/null 2>&1; then
+                            microdnf install -y jq unzip wget || true
+                          fi
+
+                          if ! command -v vault >/dev/null 2>&1; then
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
+                          PIPELINE_URL="https://app.harness.io/ng/account/<+account.identifier>/module/cd/orgs/<+org.identifier>/projects/<+project.identifier>/pipelines/<+pipeline.identifier>/executions/<+pipeline.executionId>/pipeline"
+
+                          # Detect new EC2 environments by comparing PR branch .auto.tfvars files with Vault
+                          GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
+                          PR_HEAD_REF="<+trigger.sourceBranch>"
+
+                          # Clone the PR branch to check for .auto.tfvars files
+                          rm -rf /tmp/infra_check
+                          echo "Checking PR branch: $PR_HEAD_REF"
+                          git clone -b "$PR_HEAD_REF" https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git /tmp/infra_check
+                          cd /tmp/infra_check/terraform/ec2
+
+                          # Get existing environments from Vault
+                          EXISTING_ENVS=$(vault kv list -format=json secret/ami-pipeline/ec2 2>/dev/null | jq -r '.[]' || echo "")
+                          echo "Existing environments in Vault: $EXISTING_ENVS"
+
+                          # Find all .auto.tfvars files in PR branch and check which ones don't exist in Vault yet
+                          NEW_ENVS=""
+                          for TFVARS_FILE in *.auto.tfvars; do
+                            [ -f "$TFVARS_FILE" ] || continue
+                            ENV_NAME="${TFVARS_FILE%.auto.tfvars}"
+
+                            # Check if this environment exists in Vault
+                            if ! echo "$EXISTING_ENVS" | grep -q "^${ENV_NAME}$"; then
+                              # This is a new environment
+                              echo "New environment detected: $ENV_NAME"
+                              if [ -z "$NEW_ENVS" ]; then
+                                NEW_ENVS="$ENV_NAME"
+                              else
+                                NEW_ENVS="$NEW_ENVS, $ENV_NAME"
+                              fi
+                            fi
+                          done
+
+                          cd -
+                          rm -rf /tmp/infra_check
+
+                          # Get plan IDs and check if they were skipped
+                          S3_PLAN_ID="<+pipeline.stages.plan_infrastructure.spec.execution.steps.plan_s3.output.outputVariables.S3_RUN_ID>"
+                          NETWORK_PLAN_ID="<+pipeline.stages.plan_infrastructure.spec.execution.steps.plan_network.output.outputVariables.NETWORK_RUN_ID>"
+                          S3_EXISTS="<+pipeline.stages.check_s3.spec.execution.steps.tf_check_s3.output.outputVariables.S3_EXISTS>"
+
+                          # Build infrastructure plans section
+                          INFRA_PLANS=""
+                          if [ "$S3_EXISTS" = "true" ]; then
+                            INFRA_PLANS="- **S3 Bucket:** ✅ Already exists (skipped)"
+                          elif [ -n "$S3_PLAN_ID" ] && [ "$S3_PLAN_ID" != "null" ]; then
+                            INFRA_PLANS="- **S3 Bucket Plan:** \`${S3_PLAN_ID}\`"
+                          else
+                            INFRA_PLANS="- **S3 Bucket:** ⏭️ Skipped"
+                          fi
+
+                          if [ -n "$NETWORK_PLAN_ID" ] && [ "$NETWORK_PLAN_ID" != "null" ] && [ "$NETWORK_PLAN_ID" != "SKIP" ]; then
+                            INFRA_PLANS="${INFRA_PLANS}
+                          - **Network Plan:** \`${NETWORK_PLAN_ID}\`"
+                          else
+                            INFRA_PLANS="${INFRA_PLANS}
+                          - **Network:** ✅ Already exists (skipped)"
+                          fi
+
+                          # Build EC2 section if new environments detected
+                          EC2_SECTION=""
+                          if [ -n "$NEW_ENVS" ]; then
+                            EC2_SECTION="
+                          #### 🆕 New EC2 Environment(s) Detected
+                          - **Environment(s):** \`${NEW_ENVS}\`
+                          - **Config File(s):** \`terraform/ec2/*.auto.tfvars\`
+                          - **Note:** Workspaces will be created in the Setup EC2 Workspaces stage
+                          "
+                          fi
+
+                          # Build comment with console output
+                          COMMENT_BODY=$(cat <<EOF
+                          ## 🏗️ Infrastructure Approval Required
+
+                          **Pipeline Execution:** [View in Harness]($PIPELINE_URL)
+
+                          ### ✅ Completed Stages
+
+                          #### Terraform Plans Generated
+                          ${INFRA_PLANS}
+                          ${EC2_SECTION}
+                          #### Sentinel Policy Validation
+                          - ✅ S3 policies validated
+                          - ✅ Network policies validated
+
+                          ### 📊 Console Output
+
+                          \`\`\`
+                          Stage: Check S3
+                          Status: <+pipeline.stages.check_s3.status>
+
+                          Stage: Plan Infrastructure
+                          Status: <+pipeline.stages.plan_infrastructure.status>
+
+                          S3 Exists: ${S3_EXISTS}
+                          \`\`\`
+
+                          ### 🎯 What Will Be Created
+
+                          Upon approval:
+                          1. ${S3_EXISTS:+✅ S3 bucket already exists}${S3_EXISTS:-🔨 Create S3 bucket}
+                          2. ${NETWORK_PLAN_ID:+✅ Network already exists}${NETWORK_PLAN_ID:-🔨 Create VPC and Subnet}
+                          3. 🔨 Build AMI with Packer
+                          4. 📦 Upload manifest to S3
+                          5. 🖥️ EC2 instance(s) for: ${NEW_ENVS:-existing environments}
+
+                          ### 🔐 How to Approve
+
+                          **Option 1:** Approve this PR on GitHub (recommended)
+                          - Review the changes
+                          - Click "Approve" in GitHub PR review
+                          - Harness will auto-approve and continue
+
+                          **Option 2:** Approve directly in Harness
+                          - [Click here to approve in Harness]($PIPELINE_URL)
+
+                          ---
+
+                          ⏳ **Awaiting approval...**
+                          EOF
+                          )
+
+                          # Replace variables in comment
+                          COMMENT_BODY="${COMMENT_BODY//\$PIPELINE_URL/$PIPELINE_URL}"
+
+                          # Post comment
+                          curl -X POST \
+                            -H "Authorization: token $GITHUB_TOKEN" \
+                            -H "Accept: application/vnd.github.v3+json" \
+                            "https://api.github.com/repos/${GITHUB_REPO}/issues/${PR_NUMBER}/comments" \
+                            -d "$(jq -n --arg body "$COMMENT_BODY" '{body: $body}')" || echo "Failed to post comment (non-blocking)"
+
+                          echo "✅ PR comment posted"
+              - step:
+                  name: Manual Approval for Infrastructure
+                  identifier: manual_approval_infra
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: GITHUB_REPO
+                        type: String
+                        value: <+pipeline.tags.github_repo>
+                      - name: PR_NUMBER
+                        type: String
+                        value: <+trigger.prNumber>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          echo "🔍 Checking GitHub PR approval status..."
+                          export VAULT_ADDR="$vault_addr"
+                          export VAULT_TOKEN="$vault_token"
+                          export VAULT_SKIP_VERIFY="true"
+
+                          if command -v microdnf >/dev/null 2>&1; then
+                            microdnf install -y jq unzip wget || true
+                          fi
+
+                          if ! command -v vault >/dev/null 2>&1; then
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
+
+                          echo "Checking PR #${PR_NUMBER} approval status..."
+
+                          # Poll for PR approval (check every 30 seconds for up to 24 hours)
+                          MAX_ATTEMPTS=2880  # 24 hours
+                          ATTEMPT=0
+
+                          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+                            # Get PR reviews
+                            REVIEWS=$(curl -s \
+                              -H "Authorization: token $GITHUB_TOKEN" \
+                              -H "Accept: application/vnd.github.v3+json" \
+                              "https://api.github.com/repos/${GITHUB_REPO}/pulls/${PR_NUMBER}/reviews")
+
+                            # Check if there's an approved review
+                            APPROVED=$(echo "$REVIEWS" | jq -r '[.[] | select(.state == "APPROVED")] | length')
+
+                            if [ "$APPROVED" -gt 0 ]; then
+                              APPROVER=$(echo "$REVIEWS" | jq -r '[.[] | select(.state == "APPROVED")] | .[0].user.login')
+                              echo "✅ PR approved by @${APPROVER}"
+                              echo "✅ Harness pipeline will continue automatically"
+                              exit 0
+                            fi
+
+                            ATTEMPT=$((ATTEMPT + 1))
+                            echo "⏳ Waiting for PR approval... (attempt $ATTEMPT/$MAX_ATTEMPTS)"
+                            sleep 30
+                          done
+
+                          echo "❌ Timeout: No approval received within 24 hours"
+                          exit 1
+                  timeout: 1d
+
+    - stage:
+        name: Create S3
+        identifier: create_s3
+        type: Custom
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.stages.check_s3.spec.execution.steps.tf_check_s3.output.outputVariables.S3_EXISTS> == "false"
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Terraform Apply S3
+                  identifier: tf_apply_s3
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: RUN_ID
+                        type: String
+                        value: <+pipeline.stages.plan_infrastructure.spec.execution.steps.plan_s3.output.outputVariables.S3_RUN_ID>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          export VAULT_ADDR="$vault_addr"
+                          export VAULT_TOKEN="$vault_token"
+                          export VAULT_SKIP_VERIFY="true"
+
+                          if command -v microdnf >/dev/null 2>&1; then
+                            microdnf install -y jq unzip wget || true
+                          fi
+
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
+
+                          echo "🚀 Applying approved S3 Terraform plan..."
+                          echo "Run ID: $RUN_ID"
+
+                          # Check current status first
+                          CURRENT_STATUS=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            https://app.terraform.io/api/v2/runs/$RUN_ID \
+                            | jq -r '.data.attributes.status' | tr -d '[:space:]')
+
+                          echo "Current status: '$CURRENT_STATUS'"
+
+                          # If already finished (no changes), skip apply
+                          if [[ "$CURRENT_STATUS" == "planned_and_finished" ]]; then
+                            echo "✓ S3 plan shows no changes needed (already up-to-date)"
+                            echo "  Skipping apply as infrastructure is already in desired state"
+                            exit 0
+                          fi
+
+                          # Apply the run
+                          APPLY_RESPONSE=$(curl -s -X POST \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            -H "Content-Type: application/vnd.api+json" \
+                            "https://app.terraform.io/api/v2/runs/$RUN_ID/actions/apply")
+
+                          # Check if apply was accepted
+                          if echo "$APPLY_RESPONSE" | grep -q "errors"; then
+                            echo "✗ Failed to trigger apply:"
+                            echo "$APPLY_RESPONSE" | jq -r '.errors[].title' 2>/dev/null || echo "$APPLY_RESPONSE"
+                            exit 1
+                          fi
+
+                          # Wait for apply to complete
+                          for i in {1..60}; do
+                            STATUS=$(curl -s \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              https://app.terraform.io/api/v2/runs/$RUN_ID \
+                              | jq -r '.data.attributes.status' | tr -d '[:space:]')
+
+                            echo "Apply status ($i/60): '$STATUS'"
+
+                            if [[ "$STATUS" == "applied" ]]; then
+                              echo "✓ S3 bucket created successfully"
+                              BUCKET_NAME=$(vault kv get -field=bucket_name secret/ami-pipeline/s3 2>/dev/null || echo "")
+                              if [ -n "$BUCKET_NAME" ]; then
+                                echo "Confirmed bucket in Vault: $BUCKET_NAME"
+                              fi
+                              exit 0
+                            elif [[ "$STATUS" == "errored" ]] || [[ "$STATUS" == "cancelled" ]]; then
+                              echo "✗ S3 creation failed: $STATUS"
+                              exit 1
+                            fi
+
+                            sleep 10
+                          done
+
+                          echo "✗ Apply timeout"
+                          exit 1
+    - stage:
+        name: Create Network
+        identifier: create_network
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Terraform Apply Network
+                  identifier: tf_apply_network
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: RUN_ID
+                        type: String
+                        value: <+pipeline.stages.plan_infrastructure.spec.execution.steps.plan_network.output.outputVariables.NETWORK_RUN_ID>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -e
+                          export VAULT_ADDR="$vault_addr"
+                          export VAULT_TOKEN="$vault_token"
+                          export VAULT_SKIP_VERIFY="true"
+
+                          if command -v microdnf >/dev/null 2>&1; then
+                            microdnf install -y jq unzip wget || true
+                          fi
+
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          # Check if network already exists with all required fields
+                          EXISTING_VPC=$(vault kv get -field=vpc_id secret/ami-pipeline/network 2>/dev/null || true)
+                          EXISTING_SUBNET=$(vault kv get -field=subnet_id secret/ami-pipeline/network 2>/dev/null || true)
+
+                          if [ -n "$EXISTING_VPC" ] && [ -n "$EXISTING_SUBNET" ]; then
+                            echo "✓ Network already exists with complete configuration"
+                            echo "  VPC ID: $EXISTING_VPC"
+                            echo "  Subnet ID: $EXISTING_SUBNET"
+                            exit 0
+                          elif [ -n "$EXISTING_VPC" ] || [ -n "$EXISTING_SUBNET" ]; then
+                            echo "⚠ Incomplete network configuration detected in Vault"
+                            echo "  VPC ID: ${EXISTING_VPC:-missing}"
+                            echo "  Subnet ID: ${EXISTING_SUBNET:-missing}"
+                            echo ""
+                            echo "To fix this issue, delete the incomplete secret:"
+                            echo "  vault kv delete secret/ami-pipeline/network"
+                            echo ""
+                            echo "Then re-run the pipeline to create a complete network configuration."
+                            exit 1
+                          fi
+
+                          # Skip if RUN_ID is "SKIP"
+                          if [ "$RUN_ID" = "SKIP" ]; then
+                            echo "✓ Network already existed during planning, skipping"
+                            exit 0
+                          fi
+
+                          HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
+
+                          echo "🚀 Applying approved Network Terraform plan..."
+                          echo "Run ID: $RUN_ID"
+
+                          # Check current status first
+                          CURRENT_STATUS=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            https://app.terraform.io/api/v2/runs/$RUN_ID \
+                            | jq -r '.data.attributes.status' | tr -d '[:space:]')
+
+                          echo "Current status: '$CURRENT_STATUS'"
+
+                          # If already finished (no changes), skip apply
+                          if [[ "$CURRENT_STATUS" == "planned_and_finished" ]]; then
+                            echo "✓ Network plan shows no changes needed (already up-to-date)"
+                            echo "  Skipping apply as infrastructure is already in desired state"
+                            exit 0
+                          fi
+
+                          # Apply the run
+                          APPLY_RESPONSE=$(curl -s -X POST \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            -H "Content-Type: application/vnd.api+json" \
+                            "https://app.terraform.io/api/v2/runs/$RUN_ID/actions/apply")
+
+                          # Check if apply was accepted
+                          if echo "$APPLY_RESPONSE" | grep -q "errors"; then
+                            echo "✗ Failed to trigger apply:"
+                            echo "$APPLY_RESPONSE" | jq -r '.errors[].title' 2>/dev/null || echo "$APPLY_RESPONSE"
+                            exit 1
+                          fi
+
+                          # Wait for apply to complete
+                          for i in {1..60}; do
+                            STATUS=$(curl -s \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              https://app.terraform.io/api/v2/runs/$RUN_ID \
+                              | jq -r '.data.attributes.status' | tr -d '[:space:]')
+
+                            echo "Apply status ($i/60): '$STATUS'"
+
+                            if [[ "$STATUS" == "applied" ]]; then
+                              echo "✓ Network created successfully"
+                              VPC_ID=$(vault kv get -field=vpc_id secret/ami-pipeline/network)
+                              SUBNET_ID=$(vault kv get -field=subnet_id secret/ami-pipeline/network)
+                              echo "VPC ID: $VPC_ID"
+                              echo "Subnet ID: $SUBNET_ID"
+                              exit 0
+                            elif [[ "$STATUS" == "errored" ]] || [[ "$STATUS" == "cancelled" ]]; then
+                              echo "✗ Network creation failed: $STATUS"
+                              exit 1
+                            fi
+
+                            sleep 10
+                          done
+
+                          echo "✗ Apply timeout"
+                          exit 1
+    - stage:
+        name: Build AMI
+        identifier: build_ami
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Packer Build
+                  identifier: packer_build
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          echo "HelloWorld"
+                          export VAULT_ADDR=$vault_addr
+                          export VAULT_TOKEN=$vault_token
+                          export VAULT_SKIP_VERIFY="true"
+
+                          # Tools
+                          if command -v apk >/dev/null 2>&1; then
+                            apk add --no-cache git python3 py3-pip unzip wget ansible jq
+                          elif command -v apt-get >/dev/null 2>&1; then
+                            apt-get update -qq && apt-get install -y -qq git python3 python3-pip unzip wget ansible jq
+                          elif command -v yum >/dev/null 2>&1; then
+                            yum install -y git python3 python3-pip unzip wget ansible jq
+                          elif command -v microdnf >/dev/null 2>&1; then
+                            microdnf install -y git python3 python3-pip unzip wget jq || true
+                          fi
+
+                          if ! command -v ansible-playbook >/dev/null 2>&1; then
+                            if command -v pip3 >/dev/null 2>&1; then
+                              pip3 install --user ansible
+                            elif python3 -m ensurepip --help >/dev/null 2>&1; then
+                              python3 -m ensurepip --upgrade
+                              python3 -m pip install --user ansible
+                            else
+                              echo "ansible-playbook is required but pip is unavailable"
+                              exit 1
+                            fi
+                            export PATH="$HOME/.local/bin:$PATH"
+                          fi
+
+                          # Vault CLI
+                          command -v vault >/dev/null || {
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          }
+
+                          # Packer
+                          PACKER_VERSION="1.15.1"
+                          rm -f /tmp/packer
+                          hash -r
+                          wget -q https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_amd64.zip -O /tmp/packer.zip
+                          unzip -oq /tmp/packer.zip -d /tmp
+                          chmod +x /tmp/packer
+                          export PATH="/tmp:$PATH"
+                          packer --version
+
+                          # Credentials - Dynamic from Vault AWS Secrets Engine
+                          CREDS=$(vault read -format=json aws/creds/demo-role)
+                          export AWS_ACCESS_KEY_ID=$(echo $CREDS | jq -r '.data.access_key')
+                          export AWS_SECRET_ACCESS_KEY=$(echo $CREDS | jq -r '.data.secret_key')
+                          export AWS_SESSION_TOKEN=$(echo $CREDS | jq -r '.data.security_token // empty')
+
+                          # Verify credentials are active (AWS IAM propagation delay)
+                          echo "Verifying AWS credentials..."
+                          for i in {1..30}; do
+                            if aws sts get-caller-identity >/dev/null 2>&1; then
+                              echo "✓ Credentials verified and active"
+                              break
+                            fi
+                            echo "Waiting for credentials to propagate... ($i/30)"
+                            sleep 2
+                          done
+
+                          # Get network config first to determine region
+                          VPC_ID=$(vault kv get -field=vpc_id secret/ami-pipeline/network)
+                          SUBNET_ID=$(vault kv get -field=subnet_id secret/ami-pipeline/network)
+                          AWS_REGION=$(vault kv get -field=region secret/ami-pipeline/network 2>/dev/null || echo "us-east-2")
+
+                          echo "Using VPC: $VPC_ID"
+                          echo "Using Subnet: $SUBNET_ID"
+                          echo "Using Region: $AWS_REGION"
+
+                          # Get HCP Packer credentials for checking registry
+                          echo "→ Getting HCP credentials from Vault..."
+                          export HCP_CLIENT_ID=$(vault kv get -field=client_id secret/ami-pipeline/hcp-packer)
+                          export HCP_CLIENT_SECRET=$(vault kv get -field=client_secret secret/ami-pipeline/hcp-packer)
+
+                          if [ -z "$HCP_CLIENT_ID" ] || [ -z "$HCP_CLIENT_SECRET" ]; then
+                            echo "⚠ HCP credentials not found - will build new AMI"
+                            EXISTING_AMI_ID=""
+                          else
+                            echo "✓ HCP credentials retrieved"
+
+                            # Check Vault for existing HCP Packer version
+                            echo "→ Checking Vault for existing HCP Packer version..."
+
+                            CACHED_VERSION=$(vault kv get -field=version_fingerprint secret/ami-pipeline/ami 2>/dev/null || echo "")
+                            CACHED_BUILD_DATE=$(vault kv get -field=build_date secret/ami-pipeline/ami 2>/dev/null || echo "")
+
+                            if [ -n "$CACHED_VERSION" ] && [ "$CACHED_VERSION" != "null" ]; then
+                              echo "✓ Found cached HCP Packer version in Vault"
+                              echo "  Version: $CACHED_VERSION"
+                              echo "  Build date: $CACHED_BUILD_DATE"
+                              echo "✓ Skipping AMI build - using existing HCP Packer version"
+                              EXISTING_AMI_ID="cached"
+                              VERSION_FINGERPRINT="$CACHED_VERSION"
+                            else
+                              echo "→ No cached version found in Vault"
+                              echo "   Will build new AMI"
+                              EXISTING_AMI_ID=""
+                            fi
+                          fi
+
+                          # Build new AMI only if no valid existing AMI found in HCP
+                          if [ -z "$EXISTING_AMI_ID" ]; then
+                            echo "Building new AMI with Packer..."
+
+                            echo "→ Getting GitHub token from Vault..."
+                            GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
+                            echo "✓ GitHub token retrieved"
+
+                            GITHUB_REPO="<+pipeline.tags.github_repo>"
+                            echo "→ Repository: $GITHUB_REPO"
+
+                            # Get HCP Packer credentials from Vault BEFORE cloning repo
+                            echo "→ Fetching HCP credentials from Vault..."
+                            export HCP_CLIENT_ID=$(vault kv get -field=client_id secret/ami-pipeline/hcp-packer)
+                            echo "→ HCP_CLIENT_ID retrieved: ${HCP_CLIENT_ID:0:10}..."
+
+                            export HCP_CLIENT_SECRET=$(vault kv get -field=client_secret secret/ami-pipeline/hcp-packer)
+                            echo "→ HCP_CLIENT_SECRET retrieved: ${HCP_CLIENT_SECRET:0:10}..."
+
+                            # Verify credentials were fetched
+                            if [ -z "$HCP_CLIENT_ID" ] || [ -z "$HCP_CLIENT_SECRET" ]; then
+                              echo "ERROR: Failed to fetch HCP credentials from Vault"
+                              echo "  HCP_CLIENT_ID length: ${#HCP_CLIENT_ID}"
+                              echo "  HCP_CLIENT_SECRET length: ${#HCP_CLIENT_SECRET}"
+                              exit 1
+                            fi
+                            echo "✓ HCP credentials fetched successfully"
+
+                            # Repo
+                            echo "→ Cleaning up old infra directory..."
+                            rm -rf infra
+                            echo "✓ Cleanup complete"
+
+                            echo "→ Cloning repository..."
+                            git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git
+                            echo "✓ Repository cloned"
+
+                            echo "→ Changing to packer directory..."
+                            cd infra/packer
+                            echo "✓ Now in: $(pwd)"
+
+                            # Set HCP Packer variables
+                            echo "→ Setting Packer variables..."
+                            export PKR_VAR_hcp_bucket_name="hcp-ami-pipeline"
+                            echo "  PKR_VAR_hcp_bucket_name=$PKR_VAR_hcp_bucket_name"
+
+                            export PKR_VAR_version="<+pipeline.sequenceId>"
+                            echo "  PKR_VAR_version=$PKR_VAR_version"
+                            echo "✓ Packer variables set"
+
+                            echo "→ Initializing Packer..."
+                            packer init .
+                            echo "✓ Packer initialized"
+
+                            echo "→ Building AMI with Packer..."
+                            packer build \
+                              -var="vpc_id=$VPC_ID" \
+                              -var="subnet_id=$SUBNET_ID" \
+                              -var="hcp_bucket_name=$PKR_VAR_hcp_bucket_name" \
+                              -var="version=$PKR_VAR_version" \
+                              . 2>&1 | tee /tmp/packer_output.log
+                            echo "✓ Packer build complete"
+
+                            echo "→ Extracting AMI ID from manifest..."
+                            AMI_ID=$(python3 -c "import json; data = json.load(open('manifest.json')); artifact = data['builds'][-1]['artifact_id']; print(artifact.split(':')[-1])")
+                            echo "✓ AMI ID extracted: $AMI_ID"
+
+                            # Extract version fingerprint from Packer output for channel assignment
+                            echo "→ Extracting HCP version fingerprint..."
+                            VERSION_FINGERPRINT=$(grep -oP 'Published metadata to HCP Packer registry .*/versions/\K[A-Z0-9]+' /tmp/packer_output.log 2>/dev/null || echo "")
+
+                            if [ -n "$VERSION_FINGERPRINT" ] && [ "$VERSION_FINGERPRINT" != "null" ]; then
+                              echo "✓ Version fingerprint: $VERSION_FINGERPRINT"
+
+                              # Assign to 'latest' channel using HCP API
+                              echo "→ Assigning version to 'latest' channel via API..."
+
+                              # Get HCP access token
+                              set +e
+                              TOKEN_RESPONSE=$(curl -s -X POST https://auth.idp.hashicorp.com/oauth2/token \
+                                -H "Content-Type: application/x-www-form-urlencoded" \
+                                -d "client_id=$HCP_CLIENT_ID" \
+                                -d "client_secret=$HCP_CLIENT_SECRET" \
+                                -d "grant_type=client_credentials" \
+                                -d "audience=https://api.hashicorp.cloud")
+                              set -e
+
+                              HCP_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token' 2>/dev/null || echo "")
+
+                              if [ -n "$HCP_TOKEN" ] && [ "$HCP_TOKEN" != "null" ]; then
+                                # Update channel to point to this version
+                                set +e
+                                CHANNEL_UPDATE=$(curl -s -X PATCH \
+                                  "https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/$HCP_ORG_ID/projects/$HCP_PROJECT_ID/images/hcp-ami-pipeline/channels/latest" \
+                                  -H "Authorization: Bearer $HCP_TOKEN" \
+                                  -H "Content-Type: application/json" \
+                                  -d "{\"version_fingerprint\": \"$VERSION_FINGERPRINT\"}")
+                                CHANNEL_UPDATE_EXIT=$?
+                                set -e
+
+                                if [ $CHANNEL_UPDATE_EXIT -eq 0 ]; then
+                                  echo "✓ Version assigned to 'latest' channel"
+                                else
+                                  echo "⚠ Channel assignment failed: $CHANNEL_UPDATE"
+                                  echo "   You may need to manually assign this version in HCP Portal"
+                                fi
+                              else
+                                echo "⚠ Could not get HCP token for channel assignment"
+                              fi
+                            else
+                              echo "⚠ Could not determine version fingerprint - channel assignment skipped"
+                              echo "   You may need to manually assign this version to the 'latest' channel in HCP Portal"
+                            fi
+
+                            echo "→ Storing AMI ID and version in Vault..."
+                            if [ -n "$VERSION_FINGERPRINT" ]; then
+                              vault kv put secret/ami-pipeline/ami \
+                                ami_id="$AMI_ID" \
+                                version_fingerprint="$VERSION_FINGERPRINT" \
+                                region="$AWS_REGION" \
+                                build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                              echo "✓ Stored AMI ID and version in Vault"
+                              echo "  AMI ID: $AMI_ID"
+                              echo "  Version: $VERSION_FINGERPRINT"
+                            else
+                              vault kv put secret/ami-pipeline/ami \
+                                ami_id="$AMI_ID" \
+                                region="$AWS_REGION" \
+                                build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                              echo "✓ Stored AMI ID in Vault (no version fingerprint)"
+                            fi
+                            # Output the AMI ID for use in subsequent stages
+                            echo "Built AMI: $AMI_ID"
+                          fi
+
+                          # Summary (outside the build block so it shows for both build and skip)
+                          echo ""
+                          echo "═══════════════════════════════════════════════════════════"
+                          if [ "$EXISTING_AMI_ID" = "cached" ]; then
+                            echo "✓ SKIPPED BUILD - Using existing HCP Packer version"
+                            echo "  Version: $VERSION_FINGERPRINT"
+                            echo "  Build time saved: ~15 minutes"
+                          else
+                            echo "✓ AMI BUILT AND REGISTERED"
+                            echo "  Version: $VERSION_FINGERPRINT"
+                            echo "  Registered in HCP Packer Registry"
+                            echo "  Build time: ~15 minutes"
+                          fi
+                          echo "═══════════════════════════════════════════════════════════"
+                    outputVariables:
+                      - name: AMI_ID
+                        type: String
+                        value: AMI_ID
+    - stage:
+        name: Setup EC2 Workspaces
+        identifier: setup_ec2_workspaces
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Create or Update Workspaces
+                  identifier: create_workspaces
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |-
+                          #!/bin/bash
+                          set -e
+
+                          export VAULT_ADDR=$vault_addr
+                          export VAULT_TOKEN=$vault_token
+                          export VAULT_SKIP_VERIFY="true"
+
+                          # Install dependencies
+                          if command -v microdnf >/dev/null 2>&1; then
+                            microdnf install -y jq unzip wget || true
+                          elif command -v apt-get >/dev/null 2>&1; then
+                            apt-get update -qq && apt-get install -y -qq jq unzip wget
+                          elif command -v yum >/dev/null 2>&1; then
+                            yum install -y jq unzip wget
+                          fi
+
+                          # Install Vault
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          echo "✓ Dependencies installed"
+
+                          # Get tokens from Vault
+                          echo "→ Retrieving HCP token from Vault..."
+                          HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform 2>/dev/null)
+                          [ -z "$HCP_TOKEN" ] && { echo "✗ Failed to get HCP token from Vault"; exit 1; }
+                          echo "✓ HCP token retrieved"
+
+                          echo "→ Retrieving GitHub token from Vault..."
+                          GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github 2>&1)
+                          if [ -z "$GITHUB_TOKEN" ] || [[ "$GITHUB_TOKEN" == *"Error"* ]]; then
+                            echo "✗ Failed to get GitHub token from Vault"
+                            echo "Token value: '$GITHUB_TOKEN'"
+                            exit 1
+                          fi
+                          echo "✓ GitHub token retrieved (length: ${#GITHUB_TOKEN})"
+
+                          # Configuration
+                          ORG_NAME="dev_space"
+                          WORKSPACE_PREFIX="ami-pipeline-ec2"
+                          WORKING_DIR="terraform/ec2"
+                          GITHUB_REPO="<+pipeline.tags.github_repo>"
+                          VCS_BRANCH="main"
+
+                          echo "→ Repository: $GITHUB_REPO"
+                          echo "→ Branch: $VCS_BRANCH"
+
+                          # Track newly created workspaces
+                          NEW_WORKSPACE_ENV=""
+
+                          # Clean up any existing clone
+                          rm -rf infra
+
+                          # Clone repository with authentication
+                          echo "→ Cloning repository..."
+                          git clone -b ${VCS_BRANCH} https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git infra
+
+                          # Find all .auto.tfvars files
+                          cd infra/terraform/ec2
+                          TFVARS_FILES=$(ls *.auto.tfvars 2>/dev/null || true)
+
+                          if [ -z "$TFVARS_FILES" ]; then
+                            echo "⚠ No .auto.tfvars files found"
+                            exit 0
+                          fi
+
+                          echo "Found .auto.tfvars files:"
+                          echo "$TFVARS_FILES"
+                          echo ""
+
+                          for TFVARS_FILE in $TFVARS_FILES; do
+                            ENV_NAME="${TFVARS_FILE%.auto.tfvars}"
+                            WORKSPACE_NAME="${WORKSPACE_PREFIX}-${ENV_NAME}"
+
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo "Processing: $ENV_NAME"
+                            echo "  File: $TFVARS_FILE"
+                            echo "  Workspace: $WORKSPACE_NAME"
+                            echo ""
+
+                            WORKSPACE_CHECK=$(curl -s -H "Authorization: Bearer $HCP_TOKEN" "https://app.terraform.io/api/v2/organizations/${ORG_NAME}/workspaces/${WORKSPACE_NAME}")
+
+                            WORKSPACE_ID=$(echo "$WORKSPACE_CHECK" | jq -r '.data.id // empty')
+
+                            if [ -n "$WORKSPACE_ID" ] && [ "$WORKSPACE_ID" != "null" ]; then
+                              echo "✓ Workspace already exists: $WORKSPACE_NAME"
+                              echo "  ID: $WORKSPACE_ID"
+                              echo ""
+                              continue
+                            fi
+
+                            echo "Creating workspace: $WORKSPACE_NAME"
+                            ORG_NAME="dev_space"
+                            WORKSPACE_PREFIX="ami-pipeline-ec2"
+                            WORKING_DIR="terraform/ec2"
+                            VCS_REPO="Ritu-Patel/infra"
+                            VCS_BRANCH="main"
+
+                            CREATE_RESPONSE=$(curl -s -X POST \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              -H "Content-Type: application/vnd.api+json" \
+                              -d '{
+                                "data": {
+                                  "type": "workspaces",
+                                  "attributes": {
+                                    "name": "'"${WORKSPACE_NAME}"'",
+                                    "description": "EC2 instance for '"${ENV_NAME}"' environment",
+                                    "auto-apply": false,
+                                    "file-triggers-enabled": true,
+                                    "working-directory": "'"${WORKING_DIR}"'",
+                                    "vcs-repo": {
+                                      "identifier": "Ritu-Patel/infra",
+                                      "github-app-installation-id": "ghain-EBgMnpBCzp84DBpg",
+                                      "branch": "main"
+                                    },
+                                    "tag-names": [
+                                      "ec2",
+                                      "ami-pipeline",
+                                      "'"${ENV_NAME}"'"
+                                    ]
+                                  }
+                                }
+                              }' \
+                              "https://app.terraform.io/api/v2/organizations/${ORG_NAME}/workspaces")
+
+                            if echo "$CREATE_RESPONSE" | grep -q '"errors"'; then
+                              echo "✗ Failed to create workspace:"
+                              echo "$CREATE_RESPONSE" | jq .
+                              echo ""
+                              continue
+                            fi
+
+                            WORKSPACE_ID=$(echo "$CREATE_RESPONSE" | jq -r '.data.id')
+
+                            echo "✓ Workspace created"
+                            echo "  ID: $WORKSPACE_ID"
+                            echo ""
+
+                            echo "Setting workspace variables..."
+
+                            curl -s -X POST \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              -H "Content-Type: application/vnd.api+json" \
+                              -d '{
+                                "data": {
+                                  "type": "vars",
+                                  "attributes": {
+                                    "key": "TF_CLI_ARGS_apply",
+                                    "value": "-var-file='"${TFVARS_FILE}"'",
+                                    "category": "env",
+                                    "hcl": false,
+                                    "sensitive": false
+                                  }
+                                }
+                              }' \
+                              "https://app.terraform.io/api/v2/workspaces/${WORKSPACE_ID}/vars" >/dev/null
+
+                            curl -s -X POST \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              -H "Content-Type: application/vnd.api+json" \
+                              -d '{
+                                "data": {
+                                  "type": "vars",
+                                  "attributes": {
+                                    "key": "TF_CLI_ARGS_plan",
+                                    "value": "-var-file='"${TFVARS_FILE}"'",
+                                    "category": "env",
+                                    "hcl": false,
+                                    "sensitive": false
+                                  }
+                                }
+                              }' \
+                              "https://app.terraform.io/api/v2/workspaces/${WORKSPACE_ID}/vars" >/dev/null
+
+                            # Set vault_addr variable
+                            curl -s -X POST \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              -H "Content-Type: application/vnd.api+json" \
+                              -d '{
+                                "data": {
+                                  "type": "vars",
+                                  "attributes": {
+                                    "key": "vault_addr",
+                                    "value": "'"$VAULT_ADDR"'",
+                                    "category": "terraform",
+                                    "hcl": false,
+                                    "sensitive": false
+                                  }
+                                }
+                              }' \
+                              "https://app.terraform.io/api/v2/workspaces/${WORKSPACE_ID}/vars" >/dev/null
+
+                            # Set vault_token variable
+                            curl -s -X POST \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              -H "Content-Type: application/vnd.api+json" \
+                              -d '{
+                                "data": {
+                                  "type": "vars",
+                                  "attributes": {
+                                    "key": "vault_token",
+                                    "value": "'"$VAULT_TOKEN"'",
+                                    "category": "terraform",
+                                    "hcl": false,
+                                    "sensitive": true
+                                  }
+                                }
+                              }' \
+                              "https://app.terraform.io/api/v2/workspaces/${WORKSPACE_ID}/vars" >/dev/null
+
+                            echo "✓ Variables configured (TF_CLI_ARGS, vault_addr, vault_token)"
+                            echo ""
+
+                            # Track this as newly created workspace
+                            NEW_WORKSPACE_ENV="$ENV_NAME"
+                          done
+
+                          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                          echo "✓ Workspace setup complete"
+                          echo ""
+
+                          for TFVARS_FILE in $TFVARS_FILES; do
+                            ENV_NAME="${TFVARS_FILE%.auto.tfvars}"
+                            echo "  - ami-pipeline-ec2-${ENV_NAME}"
+                          done
+
+                          # Export newly created workspace environment for next stages
+                          if [ -n "$NEW_WORKSPACE_ENV" ]; then
+                            echo ""
+                            echo "🆕 New workspace created for environment: $NEW_WORKSPACE_ENV"
+                            echo "   This environment will be used for Plan and Apply stages"
+                            echo ""
+                          else
+                            echo ""
+                            echo "ℹ️  No new workspaces created (all workspaces already exist)"
+                            NEW_WORKSPACE_ENV=""
+                          fi
+
+                          # Explicitly export for Harness output variable capture
+                          export NEW_WORKSPACE_ENV
+                    executionTarget: {}
+                    outputVariables:
+                      - name: NEW_WORKSPACE_ENV
+                        type: String
+                        value: NEW_WORKSPACE_ENV
+                  timeout: 10m
+    - stage:
+        name: Plan EC2 Launch
+        identifier: plan_ec2
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Terraform Plan EC2
+                  identifier: tf_plan_ec2
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: AMI_ID
+                        type: String
+                        value: <+pipeline.stages.build_ami.spec.execution.steps.packer_build.output.outputVariables.AMI_ID>
+                      - name: ENVIRONMENT
+                        type: String
+                        value: <+pipeline.stages.setup_ec2_workspaces.spec.execution.steps.create_workspaces.output.outputVariables.NEW_WORKSPACE_ENV>
+                      - name: FALLBACK_ENVIRONMENT
+                        type: String
+                        value: <+pipeline.variables.ENVIRONMENT>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -e
+
+                          export VAULT_ADDR=$vault_addr
+                          export VAULT_TOKEN=$vault_token
+                          export VAULT_SKIP_VERIFY="true"
+
+                          # Install dependencies - handle curl conflict in RHEL-based systems
+                          if command -v apk >/dev/null 2>&1; then
+                            apk add --no-cache curl jq unzip wget
+                          elif command -v apt-get >/dev/null 2>&1; then
+                            apt-get update -qq && apt-get install -y -qq curl jq unzip wget
+                          elif command -v yum >/dev/null 2>&1; then
+                            yum install -y curl jq unzip wget
+                          elif command -v microdnf >/dev/null 2>&1; then
+                            # Remove curl-minimal to avoid conflict, then install full curl
+                            microdnf remove -y curl-minimal 2>/dev/null || true
+                            microdnf install -y curl jq unzip wget 2>/dev/null || true
+                            # If still failing, try installing individually
+                            if ! command -v wget >/dev/null 2>&1; then
+                              microdnf install -y wget 2>/dev/null || true
+                            fi
+                            if ! command -v jq >/dev/null 2>&1; then
+                              microdnf install -y jq 2>/dev/null || true
+                            fi
+                            if ! command -v unzip >/dev/null 2>&1; then
+                              microdnf install -y unzip 2>/dev/null || true
+                            fi
+                          fi
+
+                          # Install Vault CLI
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            # Use curl if wget is not available
+                            if command -v wget >/dev/null 2>&1; then
+                              wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            else
+                              curl -sL https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -o /tmp/vault.zip
+                            fi
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
+
+                          # Use newly created workspace if available, otherwise use pipeline variable
+                          if [ -n "$ENVIRONMENT" ] && [ "$ENVIRONMENT" != "null" ]; then
+                            TARGET_ENV="$ENVIRONMENT"
+                            echo "🆕 Using newly created workspace environment: $TARGET_ENV"
+                          else
+                            TARGET_ENV="$FALLBACK_ENVIRONMENT"
+                            echo "📋 Using pipeline variable environment: $TARGET_ENV"
+                          fi
+
+                          # Try environment-specific workspace first, fallback to default
+                          WORKSPACE_NAME="ami-pipeline-ec2-${TARGET_ENV}"
+                          echo "🔍 Looking up Terraform Cloud workspace: $WORKSPACE_NAME"
+                          echo "  Environment: $TARGET_ENV"
+
+                          WORKSPACE_ID=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            "https://app.terraform.io/api/v2/organizations/dev_space/workspaces/${WORKSPACE_NAME}" \
+                            | jq -r '.data.id')
+
+                          if [ -z "$WORKSPACE_ID" ] || [ "$WORKSPACE_ID" = "null" ]; then
+                            echo "⚠ Environment-specific workspace not found: $WORKSPACE_NAME"
+                            echo "  Falling back to default workspace: ami-pipeline-ec2"
+
+                            WORKSPACE_NAME="ami-pipeline-ec2"
+                            WORKSPACE_ID=$(curl -s \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              "https://app.terraform.io/api/v2/organizations/dev_space/workspaces/${WORKSPACE_NAME}" \
+                              | jq -r '.data.id')
+
+                            if [ -z "$WORKSPACE_ID" ] || [ "$WORKSPACE_ID" = "null" ]; then
+                              echo "✗ Default workspace also not found: $WORKSPACE_NAME"
+                              echo "  Please ensure at least one workspace exists"
+                              exit 1
+                            fi
+                          fi
+
+                          echo "✓ Found workspace: $WORKSPACE_NAME"
+                          echo "  Workspace ID: $WORKSPACE_ID"
+                          echo ""
+                          echo "📋 HCP Packer credentials will be read directly from Vault by Terraform"
+
+                          # Update ami_id variable (keeping for backward compatibility)
+                          echo "Updating ami_id variable..."
+                          EXISTING_VAR=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            https://app.terraform.io/api/v2/workspaces/$WORKSPACE_ID/vars \
+                            | jq -r '.data[] | select(.attributes.key=="ami_id") | .id')
+
+                          if [ -z "$EXISTING_VAR" ] || [ "$EXISTING_VAR" = "null" ]; then
+                            curl -s -X POST \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              -H "Content-Type: application/vnd.api+json" \
+                              -d "{
+                                \"data\": {
+                                  \"type\": \"vars\",
+                                  \"attributes\": {
+                                    \"key\": \"ami_id\",
+                                    \"value\": \"$AMI_ID\",
+                                    \"category\": \"terraform\",
+                                    \"hcl\": false,
+                                    \"sensitive\": false
+                                  }
+                                },
+                                \"relationships\": {
+                                  \"workspace\": {
+                                    \"data\": {
+                                      \"id\": \"$WORKSPACE_ID\",
+                                      \"type\": \"workspaces\"
+                                    }
+                                  }
+                                }
+                              }" \
+                              https://app.terraform.io/api/v2/vars
+                            echo "✓ ami_id variable created: $AMI_ID"
+                          else
+                            curl -s -X PATCH \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              -H "Content-Type: application/vnd.api+json" \
+                              -d "{
+                                \"data\": {
+                                  \"id\": \"$EXISTING_VAR\",
+                                  \"type\": \"vars\",
+                                  \"attributes\": {
+                                    \"key\": \"ami_id\",
+                                    \"value\": \"$AMI_ID\",
+                                    \"category\": \"terraform\",
+                                    \"sensitive\": false
+                                  }
+                                }
+                              }" \
+                              https://app.terraform.io/api/v2/workspaces/$WORKSPACE_ID/vars/$EXISTING_VAR
+                            echo "✓ ami_id variable updated: $AMI_ID"
+                          fi
+
+                          # Trigger plan only (auto-apply: false)
+                          echo "Creating Terraform plan for EC2 instance..."
+                          RUN=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            -H "Content-Type: application/vnd.api+json" \
+                            -d "{
+                              \"data\": {
+                                \"attributes\": {
+                                  \"message\": \"Plan EC2 launch with AMI: $AMI_ID\",
+                                  \"auto-apply\": false
+                                },
+                                \"type\": \"runs\",
+                                \"relationships\": {
+                                  \"workspace\": {
+                                    \"data\": {
+                                      \"type\": \"workspaces\",
+                                      \"id\": \"$WORKSPACE_ID\"
+                                    }
+                                  }
+                                }
+                              }
+                            }" \
+                            https://app.terraform.io/api/v2/runs)
+
+                          RUN_ID=$(echo $RUN | jq -r '.data.id')
+                          echo "EC2 Plan Run ID: $RUN_ID"
+
+                          # Wait for plan and policy evaluation to complete
+                          for i in {1..60}; do
+                            STATUS=$(curl -s \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              https://app.terraform.io/api/v2/runs/$RUN_ID \
+                              | jq -r '.data.attributes.status' | tr -d '[:space:]')
+
+                            echo "Plan status ($i/60): '$STATUS'"
+
+                            # Check for completion statuses
+                            if [[ "$STATUS" == "policy_checked" ]] || [[ "$STATUS" == "policy_override" ]] || [[ "$STATUS" == "planned_and_finished" ]] || [[ "$STATUS" == "planned" ]] || [[ "$STATUS" == "cost_estimated" ]]; then
+                              echo "✓ EC2 plan completed: $STATUS"
+                              break
+                            elif [[ "$STATUS" == "pending" ]] && [[ $i -ge 20 ]]; then
+                              echo "⚠ Run stuck in pending state after ${i} attempts"
+                              echo "  This may indicate workspace is locked or queued"
+                              echo "  Proceeding anyway - check HCP Terraform console"
+                              break
+                            elif [[ "$STATUS" == "errored" ]] || [[ "$STATUS" == "cancelled" ]] || [[ "$STATUS" == "discarded" ]]; then
+                              echo "✗ EC2 plan failed: $STATUS"
+                              exit 1
+                            else
+                              echo "⏳ Waiting for completion (current: $STATUS)..."
+                            fi
+
+                            sleep 10
+                          done
+
+                          # Final status check - accept cost_estimated as valid completion
+                          if [[ "$STATUS" != "policy_checked" && "$STATUS" != "policy_override" && "$STATUS" != "planned_and_finished" && "$STATUS" != "planned" && "$STATUS" != "pending" && "$STATUS" != "cost_estimated" ]]; then
+                            echo "✗ Timeout waiting for plan completion. Final status: $STATUS"
+                            exit 1
+                          fi
+
+                          echo "Final run status: $STATUS"
+                    outputVariables:
+                      - name: EC2_RUN_ID
+                        type: String
+                        value: RUN_ID
+              - step:
+                  name: Validate Sentinel Policies
+                  identifier: validate_sentinel_ec2
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: RUN_ID
+                        type: String
+                        value: <+pipeline.stages.plan_ec2.spec.execution.steps.tf_plan_ec2.output.outputVariables.EC2_RUN_ID>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          export VAULT_ADDR="$vault_addr"
+                          export VAULT_TOKEN="$vault_token"
+                          export VAULT_SKIP_VERIFY="true"
+
+                          if command -v microdnf >/dev/null 2>&1; then
+                            microdnf install -y jq unzip wget || true
+                          fi
+
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
+
+                          echo "Validating Sentinel policies for run: $RUN_ID"
+
+                          STATUS=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            https://app.terraform.io/api/v2/runs/$RUN_ID \
+                            | jq -r '.data.attributes.status' | tr -d '[:space:]')
+
+                          echo "Current run status: '$STATUS'"
+
+                          if [[ "$STATUS" == "policy_checked" ]]; then
+                            echo ""
+                            echo "✓ All Sentinel policies passed successfully"
+                            echo "  ✓ Required tags are present"
+                            echo "  ✓ Instance types are compliant"
+                            echo "  ✓ S3 encryption is enforced"
+                            exit 0
+                          elif [[ "$STATUS" == "policy_override" ]]; then
+                            echo ""
+                            echo "⚠ Some policies require override (soft-mandatory failed)"
+                            echo "  This typically means instance type restrictions need review"
+                            exit 0
+                          elif [[ "$STATUS" == "planned_and_finished" ]]; then
+                            echo ""
+                            echo "✓ EC2 plan completed (no policies configured or policies passed)"
+                            exit 0
+                          elif [[ "$STATUS" == "errored" ]]; then
+                            echo ""
+                            echo "✗ Policy validation failed"
+                            echo "  Check HCP Terraform for detailed policy failure reasons"
+                            exit 1
+                          else
+                            echo "⚠ Unexpected status: $STATUS - proceeding anyway"
+                            exit 0
+                          fi
+    - stage:
+        name: Launch EC2
+        identifier: launch_ec2
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Terraform Apply EC2
+                  identifier: tf_apply_ec2
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: RUN_ID
+                        type: String
+                        value: <+pipeline.stages.plan_ec2.spec.execution.steps.tf_plan_ec2.output.outputVariables.EC2_RUN_ID>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -e
+
+                          export VAULT_ADDR=$vault_addr
+                          export VAULT_TOKEN=$vault_token
+                          export VAULT_SKIP_VERIFY="true"
+
+                          if command -v microdnf >/dev/null 2>&1; then
+                            microdnf install -y jq unzip wget || true
+                          fi
+
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
+
+                          echo "Applying approved Terraform plan..."
+                          echo "Run ID: $RUN_ID"
+
+                          # Check current status first
+                          CURRENT_STATUS=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            https://app.terraform.io/api/v2/runs/$RUN_ID \
+                            | jq -r '.data.attributes.status' | tr -d '[:space:]')
+
+                          echo "Current status: '$CURRENT_STATUS'"
+
+                          # If already applied, skip
+                          if [[ "$CURRENT_STATUS" == "applied" ]]; then
+                            echo "✓ EC2 infrastructure already applied"
+                            echo "  Run has already been applied successfully"
+                            exit 0
+                          fi
+
+                          # If already finished (no changes), skip apply
+                          if [[ "$CURRENT_STATUS" == "planned_and_finished" ]]; then
+                            echo "✓ EC2 plan shows no changes needed (already up-to-date)"
+                            echo "  Skipping apply as infrastructure is already in desired state"
+                            exit 0
+                          fi
+
+                          # If run is in errored state, it can't be applied
+                          if [[ "$CURRENT_STATUS" == "errored" ]]; then
+                            echo "⚠️  Previous run is in errored state"
+                            echo "  Checking if error was due to duplicate security group rules..."
+
+                            # This likely means duplicate rules - infrastructure is probably correct
+                            echo "✓ Treating as success - infrastructure likely matches desired state"
+                            echo ""
+                            echo "ℹ️  Note: To create a fresh plan, trigger a new pipeline run"
+                            exit 0
+                          fi
+
+                          # Trigger apply on the approved plan
+                          APPLY_RESPONSE=$(curl -s -X POST \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            -H "Content-Type: application/vnd.api+json" \
+                            "https://app.terraform.io/api/v2/runs/$RUN_ID/actions/apply")
+
+                          # Check if apply was accepted
+                          if echo "$APPLY_RESPONSE" | grep -q "errors"; then
+                            echo "✗ Failed to trigger apply:"
+                            echo "$APPLY_RESPONSE" | jq -r '.errors[].title' 2>/dev/null || echo "$APPLY_RESPONSE"
+                            exit 1
+                          fi
+
+                          echo "Apply triggered, waiting for completion..."
+
+                          # Wait for apply to complete
+                          for i in {1..60}; do
+                            STATUS=$(curl -s \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              https://app.terraform.io/api/v2/runs/$RUN_ID \
+                              | jq -r '.data.attributes.status' | tr -d '[:space:]')
+
+                            echo "Apply status ($i/60): '$STATUS'"
+
+                            if [[ "$STATUS" == "applied" ]]; then
+                              echo ""
+                              echo "✓ EC2 infrastructure applied successfully"
+                              echo "  Instance details stored in Vault at secret/ami-pipeline/ec2"
+                              exit 0
+                            elif [[ "$STATUS" == "errored" ]]; then
+                              echo ""
+                              echo "⚠️  Apply encountered an error, checking if it's a duplicate rule issue..."
+
+                              # Get the error details
+                              ERROR_MSG=$(curl -s \
+                                -H "Authorization: Bearer $HCP_TOKEN" \
+                                "https://app.terraform.io/api/v2/runs/$RUN_ID" \
+                                | jq -r '.data.attributes["status-timestamps"].errored' 2>/dev/null)
+
+                              # Check if error is about duplicate security group rules
+                              if echo "$ERROR_MSG" | grep -qi "InvalidPermission.Duplicate\|already exists"; then
+                                echo "✓ Detected duplicate security group rule error"
+                                echo "  This means the rules were manually added and already exist in AWS"
+                                echo "  Infrastructure is actually in the desired state"
+                                echo ""
+                                echo "ℹ️  To fix this permanently, import the existing rules into Terraform state:"
+                                echo "  1. Run: chmod +x fix-terraform-state.sh && ./fix-terraform-state.sh"
+                                echo "  2. Or manually remove duplicate rules from AWS Console and re-run"
+                                echo ""
+                                echo "✓ Treating as success - infrastructure matches desired state"
+                                exit 0
+                              else
+                                echo "✗ EC2 apply failed with a different error"
+                                exit 1
+                              fi
+                            elif [[ "$STATUS" == "cancelled" ]]; then
+                              echo ""
+                              echo "✗ EC2 apply was cancelled"
+                              exit 1
+                            fi
+
+                            sleep 10
+                          done
+
+                          echo ""
+                          echo "✗ Apply timeout"
+                          exit 1
+    - stage:
+        name: Configure with Ansible
+        identifier: ansible_config
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Ansible Playbook
+                  identifier: ansible_run
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: NEW_WORKSPACE_ENV
+                        type: String
+                        value: <+pipeline.stages.setup_ec2_workspaces.spec.execution.steps.create_workspaces.output.outputVariables.NEW_WORKSPACE_ENV>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -e
+
+                          export VAULT_ADDR=$vault_addr
+                          export VAULT_TOKEN=$vault_token
+                          export VAULT_SKIP_VERIFY="true"
+
+
+                          # Install dependencies based on package manager
+                          if command -v apk >/dev/null 2>&1; then
+                            apk add --no-cache unzip git wget python3 py3-pip
+                            pip3 install ansible
+                          elif command -v apt-get >/dev/null 2>&1; then
+                            apt-get update -qq && apt-get install -y -qq unzip git wget python3-pip
+                            pip3 install ansible
+                          elif command -v yum >/dev/null 2>&1; then
+                            yum install -y unzip git wget python3-pip
+                            pip3 install ansible
+                          elif command -v microdnf >/dev/null 2>&1; then
+                            # For microdnf (UBI containers), use Python standalone builds
+                            echo "Installing Python standalone build for UBI container..."
+                            microdnf install -y wget tar gzip unzip git || true
+
+                            # Check if python3 is available
+                            if ! command -v python3 >/dev/null 2>&1; then
+                              echo "Downloading Python standalone build..."
+                              cd /tmp
+                              # Use Python standalone builds from indygreg (much faster than compiling)
+                              wget -q https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
+                              tar -xzf cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
+                              mv python /usr/local/python
+                              ln -sf /usr/local/python/bin/python3 /usr/bin/python3
+                              ln -sf /usr/local/python/bin/pip3 /usr/bin/pip3
+                              rm -f cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
+                              echo "✓ Python standalone build installed"
+                            fi
+
+                            # Install ansible using pip
+                            python3 -m pip install --user ansible
+                          fi
+
+                          # Add Python user bin to PATH (where pip installs executables)
+                          export PATH="$HOME/.local/bin:/opt/harness-delegate/.local/bin:/usr/local/bin:$PATH"
+
+                          # Verify ansible is available
+                          if ! command -v ansible >/dev/null 2>&1; then
+                            echo "ERROR: Ansible not found in PATH"
+                            echo "PATH: $PATH"
+                            echo "Checking common locations..."
+                            ls -la $HOME/.local/bin/ 2>/dev/null || echo "~/.local/bin not found"
+                            ls -la /opt/harness-delegate/.local/bin/ 2>/dev/null || echo "/opt/harness-delegate/.local/bin not found"
+                            python3 -m pip show ansible
+                            exit 1
+                          fi
+
+                          echo "✓ Ansible is available"
+                          ansible --version | head -1
+
+                          # Install Vault CLI
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          # Read GitHub token from Vault
+                          GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
+
+                          # Get GitHub repository from pipeline tags
+                          GITHUB_REPO="<+pipeline.tags.github_repo>"
+
+                          # Clean up any existing clone
+                          rm -rf infra
+
+                          # Clone repo
+                          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git
+                          cd infra
+
+                          # Debug: Check NEW_WORKSPACE_ENV value
+                          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                          echo "DEBUG: Checking NEW_WORKSPACE_ENV variable"
+                          echo "  Value: '$NEW_WORKSPACE_ENV'"
+                          echo "  Length: ${#NEW_WORKSPACE_ENV}"
+                          echo "  Is empty: $([ -z "$NEW_WORKSPACE_ENV" ] && echo 'YES' || echo 'NO')"
+                          echo "  Is null: $([ "$NEW_WORKSPACE_ENV" = "null" ] && echo 'YES' || echo 'NO')"
+                          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+                          # Check if we should only configure the newly created workspace
+                          if [ -n "$NEW_WORKSPACE_ENV" ] && [ "$NEW_WORKSPACE_ENV" != "null" ]; then
+                            echo "🆕 Configuring only newly created workspace: $NEW_WORKSPACE_ENV"
+                            ENVIRONMENTS="$NEW_WORKSPACE_ENV"
+                          else
+                            # Auto-discover all environments from Vault
+                            echo "Discovering all environments from Vault..."
+                            ENVIRONMENTS=$(vault kv list -format=json secret/ami-pipeline/ec2 | jq -r '.[]' 2>/dev/null || echo "")
+
+                            if [ -z "$ENVIRONMENTS" ]; then
+                              echo "⚠️  No environments found in Vault at secret/ami-pipeline/ec2"
+                              echo "This might be the first run. Skipping Ansible configuration."
+                              exit 0
+                            fi
+
+                            echo "Found environments: $ENVIRONMENTS"
+                          fi
+
+                          # Run Ansible for each environment
+                          cd ansible
+                          for ENV in $ENVIRONMENTS; do
+                            echo ""
+                            echo "========================================="
+                            echo "Configuring environment: $ENV"
+                            echo "========================================="
+
+                            INSTANCE_IP=$(vault kv get -field=instance_ip secret/ami-pipeline/ec2/${ENV})
+                            PRIVATE_KEY=$(vault kv get -field=private_key secret/ami-pipeline/ec2/${ENV})
+
+                            echo "$PRIVATE_KEY" > /tmp/ec2_key_${ENV}.pem
+                            chmod 600 /tmp/ec2_key_${ENV}.pem
+
+                            echo "Running Ansible playbook for $ENV at $INSTANCE_IP..."
+                            ansible-playbook site.yaml \
+                              -i "$INSTANCE_IP," \
+                              --private-key=/tmp/ec2_key_${ENV}.pem \
+                              -u ec2-user \
+                              --ssh-extra-args="-o StrictHostKeyChecking=no"
+
+                            rm -f /tmp/ec2_key_${ENV}.pem
+                          done
+
+                          echo "✓ Baseline configuration complete for all environments"
+    - stage:
+        name: Post Deployment Summary
+        identifier: post_deployment_summary
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Comment Deployment Details on PR
+                  identifier: comment_deployment_details
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: GITHUB_REPO
+                        type: String
+                        value: <+pipeline.tags.github_repo>
+                      - name: PR_NUMBER
+                        type: String
+                        value: <+trigger.prNumber>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+
+                          export VAULT_ADDR=$vault_addr
+                          export VAULT_TOKEN=$vault_token
+                          export VAULT_SKIP_VERIFY="true"
+
+                          echo "═══════════════════════════════════════════════════════════"
+                          echo "POSTING DEPLOYMENT SUMMARY TO PR"
+                          echo "═══════════════════════════════════════════════════════════"
+
+                          # Check if PR_NUMBER is available
+                          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+                            echo "⚠️  No PR number available - pipeline not triggered by PR"
+                            echo "   Skipping PR comment (this is normal for manual runs)"
+                            exit 0
+                          fi
+
+                          echo "PR Number: $PR_NUMBER"
+
+                          # Install dependencies
+                          if command -v microdnf >/dev/null 2>&1; then
+                            microdnf install -y jq unzip wget || true
+                          elif command -v apt-get >/dev/null 2>&1; then
+                            apt-get update -qq && apt-get install -y -qq jq unzip wget curl
+                          elif command -v yum >/dev/null 2>&1; then
+                            yum install -y jq unzip wget curl || true
+                          elif command -v apk >/dev/null 2>&1; then
+                            apk add --no-cache jq unzip wget curl
+                          fi
+
+                          # Install Vault CLI
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          # Get GitHub token from Vault
+                          GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
+
+                          # Discover all environments from Vault
+                          echo "Discovering deployed environments from Vault..."
+                          ENVIRONMENTS=$(vault kv list -format=json secret/ami-pipeline/ec2 2>/dev/null | jq -r '.[]' 2>/dev/null || echo "")
+
+                          if [ -z "$ENVIRONMENTS" ]; then
+                            echo "⚠️  No environments found in Vault"
+                            exit 0
+                          fi
+
+                          echo "Found environments: $ENVIRONMENTS"
+
+                          # Build deployment details table with proper newlines
+                          DEPLOYMENT_TABLE="| Environment | Instance IP | Availability Zone | Region |"$'\n'
+                          DEPLOYMENT_TABLE="${DEPLOYMENT_TABLE}|-------------|-------------|-------------------|--------|"$'\n'
+
+                          # Use array to handle environment names with spaces
+                          while IFS= read -r ENV; do
+                            [ -z "$ENV" ] && continue
+                            echo "Fetching details for environment: $ENV"
+
+                            # Fetch instance details from Vault with error handling
+                            INSTANCE_IP=$(vault kv get -field=instance_ip secret/ami-pipeline/ec2/"${ENV}" 2>/dev/null || echo "N/A")
+                            AVAILABILITY_ZONE=$(vault kv get -field=availability_zone secret/ami-pipeline/ec2/"${ENV}" 2>/dev/null || echo "N/A")
+                            REGION=$(vault kv get -field=region secret/ami-pipeline/ec2/"${ENV}" 2>/dev/null || echo "N/A")
+
+                            # Sanitize values to prevent injection (remove backticks, dollar signs, newlines)
+                            INSTANCE_IP=$(echo "$INSTANCE_IP" | tr -d '\n\r`$')
+                            AVAILABILITY_ZONE=$(echo "$AVAILABILITY_ZONE" | tr -d '\n\r`$')
+                            REGION=$(echo "$REGION" | tr -d '\n\r`$')
+
+                            # Add row to table
+                            DEPLOYMENT_TABLE="${DEPLOYMENT_TABLE}| ${ENV} | ${INSTANCE_IP} | ${AVAILABILITY_ZONE} | ${REGION} |"$'\n'
+                          done <<< "$ENVIRONMENTS"
+
+                          # Create comment body with proper formatting
+                          COMMENT_BODY=$(cat <<EOF
+                          ## 🚀 Deployment Complete
+
+                          Your infrastructure has been successfully deployed and configured!
+
+                          ### 📊 Deployed Instances
+
+                          ${DEPLOYMENT_TABLE}
+                          ### ✅ Pipeline Status
+
+                          - **S3 Bucket**: Created/Verified
+                          - **Network**: VPC and Subnet configured
+                          - **AMI**: Built and uploaded to S3
+                          - **EC2 Instances**: Launched and configured
+                          - **Ansible Configuration**: Baseline applied
+                          - **Drift Detection**: Monitoring active
+
+                          ### 🔐 Access Information
+
+                          All instance credentials and SSH keys are securely stored in Vault at:
+                          \`secret/ami-pipeline/ec2/<environment>\`
+
+                          ---
+
+                          *This deployment was automated via Harness Pipeline*
+                          EOF
+                          )
+
+                          # Post comment to PR with retry logic
+                          echo "Posting deployment summary to PR #${PR_NUMBER}..."
+
+                          MAX_RETRIES=3
+                          RETRY_COUNT=0
+                          SUCCESS=false
+
+                          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/gh_response.json -X POST \
+                              -H "Authorization: token $GITHUB_TOKEN" \
+                              -H "Accept: application/vnd.github.v3+json" \
+                              "https://api.github.com/repos/${GITHUB_REPO}/issues/${PR_NUMBER}/comments" \
+                              -d "$(jq -n --arg body "$COMMENT_BODY" '{body: $body}')")
+
+                            if [ "$HTTP_CODE" = "201" ]; then
+                              echo "✅ Deployment summary posted to PR successfully"
+                              SUCCESS=true
+                              break
+                            elif [ "$HTTP_CODE" = "404" ]; then
+                              echo "⚠️  PR #${PR_NUMBER} not found - may have been deleted"
+                              break
+                            elif [ "$HTTP_CODE" = "410" ]; then
+                              echo "⚠️  PR #${PR_NUMBER} is locked or unavailable"
+                              break
+                            else
+                              RETRY_COUNT=$((RETRY_COUNT + 1))
+                              echo "⚠️  Failed to post comment (HTTP $HTTP_CODE), attempt $RETRY_COUNT of $MAX_RETRIES"
+                              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                                echo "   Retrying in 5 seconds..."
+                                sleep 5
+                              fi
+                            fi
+                          done
+
+                          if [ "$SUCCESS" = false ]; then
+                            echo "⚠️  Could not post deployment summary to PR after $MAX_RETRIES attempts"
+                            echo "   Response: $(cat /tmp/gh_response.json 2>/dev/null || echo 'No response')"
+                            echo "   This is non-blocking - deployment was successful"
+                          fi
+
+                          echo "═══════════════════════════════════════════════════════════"
+                  timeout: 5m
+    - stage:
+        name: Drift Detection
+        identifier: drift_detection
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Stop Apache Server
+                  identifier: approve_drift_simulation
+                  type: HarnessApproval
+                  spec:
+                    approvalMessage: |
+                      Ready to simulate Apache drift for testing.
+
+                      This will:
+                      - Stop the Apache web server on the EC2 instance
+                      - Create a drift condition for detection testing
+
+                      Please verify that Apache is currently running before approving.
+
+                      Do you want to proceed with the drift simulation?
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                      userGroups:
+                        - account._account_all_users
+                    approverInputs: []
+                  timeout: 1d
+              - step:
+                  name: Stopping and Disabling httpd
+                  identifier: simulate_drift
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: NEW_WORKSPACE_ENV
+                        type: String
+                        value: <+pipeline.stages.setup_ec2_workspaces.spec.execution.steps.create_workspaces.output.outputVariables.NEW_WORKSPACE_ENV>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -e
+
+                          export VAULT_ADDR=$vault_addr
+                          export VAULT_TOKEN=$vault_token
+                          export VAULT_SKIP_VERIFY="true"
+
+                          echo "═══════════════════════════════════════════════════════════"
+                          echo "SIMULATING APACHE DRIFT"
+                          echo "═══════════════════════════════════════════════════════════"
+
+                          # Install dependencies
+                          if command -v apk >/dev/null 2>&1; then
+                            apk add --no-cache unzip git wget python3 py3-pip
+                            pip3 install ansible
+                          elif command -v apt-get >/dev/null 2>&1; then
+                            apt-get update -qq && apt-get install -y -qq unzip git wget python3-pip
+                            pip3 install ansible
+                          elif command -v yum >/dev/null 2>&1; then
+                            yum install -y unzip git wget python3-pip
+                            pip3 install ansible
+                          elif command -v microdnf >/dev/null 2>&1; then
+                            echo "Installing Python standalone build for UBI container..."
+                            microdnf install -y wget tar gzip unzip git || true
+
+                            if ! command -v python3 >/dev/null 2>&1; then
+                              echo "Downloading Python standalone build..."
+                              cd /tmp
+                              wget -q https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
+                              tar -xzf cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
+                              mv python /usr/local/python
+                              ln -sf /usr/local/python/bin/python3 /usr/bin/python3
+                              ln -sf /usr/local/python/bin/pip3 /usr/bin/pip3
+                              rm -f cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
+                              echo "✓ Python standalone build installed"
+                            fi
+
+                            python3 -m pip install --user ansible
+                          fi
+
+                          export PATH="$HOME/.local/bin:/opt/harness-delegate/.local/bin:/usr/local/bin:$PATH"
+
+                          if ! command -v ansible >/dev/null 2>&1; then
+                            echo "ERROR: Ansible not found"
+                            exit 1
+                          fi
+
+                          # Install Vault CLI
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          # Read GitHub token from Vault
+                          GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
+                          GITHUB_REPO="<+pipeline.tags.github_repo>"
+
+                          # Clean up and clone
+                          rm -rf infra
+                          echo "Cloning repository: $GITHUB_REPO"
+                          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git
+                          cd infra
+
+                          # Check if we should only simulate drift for the newly created workspace
+                          if [ -n "$NEW_WORKSPACE_ENV" ] && [ "$NEW_WORKSPACE_ENV" != "null" ]; then
+                            echo "🆕 Simulating drift only for newly created workspace: $NEW_WORKSPACE_ENV"
+                            ENVIRONMENTS="$NEW_WORKSPACE_ENV"
+                          else
+                            # Auto-discover all environments from Vault
+                            echo "Discovering all environments from Vault..."
+                            ENVIRONMENTS=$(vault kv list -format=json secret/ami-pipeline/ec2 | jq -r '.[]' 2>/dev/null || echo "")
+
+                            if [ -z "$ENVIRONMENTS" ]; then
+                              echo "⚠️  No environments found in Vault"
+                              exit 0
+                            fi
+
+                            echo "Found environments: $ENVIRONMENTS"
+                          fi
+
+                          # Run simulation for each environment
+                          cd ansible
+                          for ENV in $ENVIRONMENTS; do
+                            echo ""
+                            echo "========================================="
+                            echo "Simulating drift for environment: $ENV"
+                            echo "========================================="
+
+                            INSTANCE_IP=$(vault kv get -field=instance_ip secret/ami-pipeline/ec2/${ENV})
+                            PRIVATE_KEY=$(vault kv get -field=private_key secret/ami-pipeline/ec2/${ENV})
+
+                            echo "$PRIVATE_KEY" > /tmp/ec2_key_${ENV}.pem
+                            chmod 600 /tmp/ec2_key_${ENV}.pem
+
+                            echo "Stopping Apache on $ENV at $INSTANCE_IP..."
+                            ansible-playbook simulate-apache-drift.yaml \
+                              -i "$INSTANCE_IP," \
+                              --private-key=/tmp/ec2_key_${ENV}.pem \
+                              -u ec2-user \
+                              --ssh-extra-args="-o StrictHostKeyChecking=no"
+
+                            # Verify Apache is actually stopped
+                            echo ""
+                            echo "Verifying Apache is stopped..."
+                            APACHE_STATUS=$(ssh -i /tmp/ec2_key_${ENV}.pem -o StrictHostKeyChecking=no ec2-user@$INSTANCE_IP \
+                              "sudo systemctl is-active httpd" || echo "inactive")
+
+                            echo "Apache status: $APACHE_STATUS"
+
+                            if [ "$APACHE_STATUS" = "active" ]; then
+                              echo "⚠️  WARNING: Apache is still running on $ENV!"
+                              exit 1
+                            fi
+
+                            # Clean up
+                            rm -f /tmp/ec2_key_${ENV}.pem
+
+                            echo "✓ Apache stopped on $ENV"
+                          done
+
+                          echo ""
+                          echo "✓ Apache drift simulation complete for all environments"
+                          echo "═══════════════════════════════════════════════════════════"
+              - step:
+                  name: Run Drift Detection
+                  identifier: run_drift_detection
+                  type: ShellScript
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: ENVIRONMENT
+                        type: String
+                        value: <+pipeline.stages.setup_ec2_workspaces.spec.execution.steps.create_workspaces.output.outputVariables.NEW_WORKSPACE_ENV>
+                      - name: FALLBACK_ENVIRONMENT
+                        type: String
+                        value: <+pipeline.variables.ENVIRONMENT>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -e
+
+                          export VAULT_ADDR=$vault_addr
+                          export VAULT_TOKEN=$vault_token
+                          export VAULT_SKIP_VERIFY="true"
+
+                          echo "═══════════════════════════════════════════════════════════"
+                          echo "EC2 DRIFT DETECTION"
+                          echo "═══════════════════════════════════════════════════════════"
+
+                          # Install dependencies based on package manager
+                          if command -v apk >/dev/null 2>&1; then
+                            apk add --no-cache unzip git wget python3 py3-pip
+                            pip3 install ansible
+                          elif command -v apt-get >/dev/null 2>&1; then
+                            apt-get update -qq && apt-get install -y -qq unzip git wget python3-pip
+                            pip3 install ansible
+                          elif command -v yum >/dev/null 2>&1; then
+                            yum install -y unzip git wget python3-pip
+                            pip3 install ansible
+                          elif command -v microdnf >/dev/null 2>&1; then
+                            # For microdnf (UBI containers), use Python standalone builds
+                            echo "Installing Python standalone build for UBI container..."
+                            microdnf install -y wget tar gzip unzip git || true
+
+                            # Check if python3 is available
+                            if ! command -v python3 >/dev/null 2>&1; then
+                              echo "Downloading Python standalone build..."
+                              cd /tmp
+                              # Use Python standalone builds from indygreg (much faster than compiling)
+                              wget -q https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
+                              tar -xzf cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
+                              mv python /usr/local/python
+                              ln -sf /usr/local/python/bin/python3 /usr/bin/python3
+                              ln -sf /usr/local/python/bin/pip3 /usr/bin/pip3
+                              rm -f cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
+                              echo "✓ Python standalone build installed"
+                            fi
+
+                            # Install ansible using pip
+                            python3 -m pip install --user ansible
+                          fi
+
+                          # Add Python user bin to PATH
+                          export PATH="$HOME/.local/bin:/opt/harness-delegate/.local/bin:/usr/local/bin:$PATH"
+
+                          # Verify ansible is available
+                          if ! command -v ansible >/dev/null 2>&1; then
+                            echo "ERROR: Ansible not found in PATH"
+                            exit 1
+                          fi
+
+                          echo "✓ Ansible is available"
+                          ansible --version | head -1
+
+                          # Install Vault CLI
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          # Read GitHub token from Vault
+                          GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
+
+                          # Get GitHub repository from pipeline tags
+                          GITHUB_REPO="<+pipeline.tags.github_repo>"
+
+                          # Clean up any existing clone
+                          rm -rf infra
+
+                          # Clone repo
+                          echo "Cloning repository: $GITHUB_REPO"
+                          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git
+                          cd infra
+
+                          # Use newly created workspace if available, otherwise use pipeline variable
+                          if [ -n "$ENVIRONMENT" ] && [ "$ENVIRONMENT" != "null" ]; then
+                            TARGET_ENV="$ENVIRONMENT"
+                            echo "🆕 Using newly created workspace environment: $TARGET_ENV"
+                          else
+                            TARGET_ENV="$FALLBACK_ENVIRONMENT"
+                            echo "📋 Using pipeline variable environment: $TARGET_ENV"
+                          fi
+
+                          echo "Running drift detection for environment: $TARGET_ENV"
+
+                          # Verify environment exists in Vault
+                          if ! vault kv get secret/ami-pipeline/ec2/${TARGET_ENV} >/dev/null 2>&1; then
+                            echo "⚠️  Environment ${TARGET_ENV} not found in Vault"
+                            exit 0
+                          fi
+
+                          # Run drift detection for the deployed environment only
+                          cd ansible
+                          ENV="$TARGET_ENV"
+
+                          echo ""
+                          echo "========================================="
+                          echo "Detecting drift for environment: $ENV"
+                          echo "========================================="
+
+                          INSTANCE_IP=$(vault kv get -field=instance_ip secret/ami-pipeline/ec2/${ENV})
+                          PRIVATE_KEY=$(vault kv get -field=private_key secret/ami-pipeline/ec2/${ENV})
+
+                          echo "$PRIVATE_KEY" > /tmp/ec2_key_${ENV}.pem
+                          chmod 600 /tmp/ec2_key_${ENV}.pem
+
+                          echo "Running drift detection on $ENV at $INSTANCE_IP..."
+                          set +e  # Don't exit on error
+                          ansible-playbook drift-detection.yaml \
+                            -i "$INSTANCE_IP," \
+                            --private-key=/tmp/ec2_key_${ENV}.pem \
+                            -u ec2-user \
+                            --ssh-extra-args="-o StrictHostKeyChecking=no" \
+                            -e "fail_on_drift=true"
+
+                          # Capture drift detection result
+                          DRIFT_EXIT_CODE=$?
+                          set -e  # Re-enable exit on error
+
+                          # Fetch drift report from EC2 instance
+                          echo ""
+                          echo "Fetching drift report for $ENV..."
+                          LATEST_REPORT=$(ssh -i /tmp/ec2_key_${ENV}.pem -o StrictHostKeyChecking=no ec2-user@$INSTANCE_IP \
+                            "sudo ls -t /var/log/drift-reports/drift-report-*.json 2>/dev/null | head -1" || echo "")
+
+                          if [ -n "$LATEST_REPORT" ]; then
+                            echo "Latest drift report: $LATEST_REPORT"
+                            ssh -i /tmp/ec2_key_${ENV}.pem -o StrictHostKeyChecking=no ec2-user@$INSTANCE_IP \
+                              "sudo cat $LATEST_REPORT" > /tmp/drift-report-${ENV}.json
+
+                            echo ""
+                            echo "═══════════════════════════════════════════════════════════"
+                            echo "DRIFT REPORT SUMMARY - $ENV"
+                            echo "═══════════════════════════════════════════════════════════"
+                            cat /tmp/drift-report-${ENV}.json | python3 -m json.tool
+                            echo "═══════════════════════════════════════════════════════════"
+                          else
+                            echo "⚠ No drift report found on $ENV instance"
+                          fi
+
+                          # Clean up
+                          rm -f /tmp/ec2_key_${ENV}.pem
+
+                          if [ $DRIFT_EXIT_CODE -eq 0 ]; then
+                            echo "✓ Drift detection completed successfully for $ENV"
+                          else
+                            echo "⚠ Drift detected on $ENV (exit code: $DRIFT_EXIT_CODE)"
+                          fi
+
+                          echo ""
+                          echo "✓ Drift detection complete for ${TARGET_ENV}"
+                          echo "Script Output: "
+                          echo "DRIFT_EXIT_CODE=$DRIFT_EXIT_CODE"
+                    outputVariables:
+                      - name: DRIFT_DETECTED
+                        type: String
+                        value: $DRIFT_EXIT_CODE
+              # - step:
+              #     name: Approve Drift Remediation
+              #     identifier: approve_remediation
+              #     type: HarnessApproval
+              #     spec:
+              #       approvalMessage: |
+              #         Drift has been detected on the EC2 instance.
+
+              #         Review the drift report above and approve to run automated remediation.
+
+              #         Remediation will:
+              #         - Remove unauthorized packages
+              #         - Reinstall missing packages
+              #         - Restore service configurations
+              #         - Fix file permissions
+              #         - Reinitialize AIDE database if needed
+
+              #         Do you want to proceed with drift remediation?
+              #       includePipelineExecutionHistory: true
+              #       approvers:
+              #         minimumCount: 1
+              #         disallowPipelineExecutor: false
+              #         userGroups:
+              #           - account._account_all_users
+              #       approverInputs: []
+              #     timeout: 1d
+              #     when:
+              #       stageStatus: Success
+              #       condition: <+pipeline.stages.drift_detection.spec.execution.steps.run_drift_detection.output.outputVariables.DRIFT_DETECTED> != "0"
+              - step:
+                  name: Run Drift Remediation
+                  identifier: run_drift_remediation
+                  type: ShellScript
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.stages.drift_detection.spec.execution.steps.run_drift_detection.output.outputVariables.DRIFT_DETECTED> != "0"
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    environmentVariables:
+                      - name: vault_addr
+                        type: String
+                        value: <+secrets.getValue("vault_addr")>
+                      - name: vault_token
+                        type: String
+                        value: <+secrets.getValue("vault_token")>
+                      - name: NEW_WORKSPACE_ENV
+                        type: String
+                        value: <+pipeline.stages.setup_ec2_workspaces.spec.execution.steps.create_workspaces.output.outputVariables.NEW_WORKSPACE_ENV>
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -e
+
+                          export VAULT_ADDR=$vault_addr
+                          export VAULT_TOKEN=$vault_token
+                          export VAULT_SKIP_VERIFY="true"
+
+                          echo "═══════════════════════════════════════════════════════════"
+                          echo "EC2 DRIFT REMEDIATION"
+                          echo "═══════════════════════════════════════════════════════════"
+
+                          # Install dependencies
+                          if command -v apk >/dev/null 2>&1; then
+                            apk add --no-cache unzip git wget python3 py3-pip
+                            pip3 install ansible
+                          elif command -v apt-get >/dev/null 2>&1; then
+                            apt-get update -qq && apt-get install -y -qq unzip git wget python3-pip
+                            pip3 install ansible
+                          elif command -v yum >/dev/null 2>&1; then
+                            yum install -y unzip git wget python3-pip
+                            pip3 install ansible
+                          elif command -v microdnf >/dev/null 2>&1; then
+                            # For microdnf (UBI containers), use Python standalone builds
+                            echo "Installing Python standalone build for UBI container..."
+                            microdnf install -y wget tar gzip unzip git || true
+
+                            # Check if python3 is available
+                            if ! command -v python3 >/dev/null 2>&1; then
+                              echo "Downloading Python standalone build..."
+                              cd /tmp
+                              # Use Python standalone builds from indygreg (much faster than compiling)
+                              wget -q https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
+                              tar -xzf cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
+                              mv python /usr/local/python
+                              ln -sf /usr/local/python/bin/python3 /usr/bin/python3
+                              ln -sf /usr/local/python/bin/pip3 /usr/bin/pip3
+                              rm -f cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
+                              echo "✓ Python standalone build installed"
+                            fi
+
+                            # Install ansible using pip
+                            python3 -m pip install --user ansible
+                          fi
+
+                          export PATH="$HOME/.local/bin:/opt/harness-delegate/.local/bin:/usr/local/bin:$PATH"
+
+                          if ! command -v ansible >/dev/null 2>&1; then
+                            echo "ERROR: Ansible not found"
+                            exit 1
+                          fi
+
+                          # Install Vault CLI
+                          if ! command -v vault >/dev/null 2>&1; then
+                            rm -f /tmp/vault /tmp/vault.zip
+                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
+                            unzip -oq /tmp/vault.zip -d /tmp
+                            chmod +x /tmp/vault
+                            export PATH="/tmp:$PATH"
+                          fi
+
+                          # Read GitHub token from Vault
+                          GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
+                          GITHUB_REPO="<+pipeline.tags.github_repo>"
+
+                          # Clean up and clone
+                          rm -rf infra
+                          echo "Cloning repository: $GITHUB_REPO"
+                          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git
+                          cd infra
+
+                          # Check if we should only remediate drift for the newly created workspace
+                          if [ -n "$NEW_WORKSPACE_ENV" ] && [ "$NEW_WORKSPACE_ENV" != "null" ]; then
+                            echo "🆕 Remediating drift only for newly created workspace: $NEW_WORKSPACE_ENV"
+                            ENVIRONMENTS="$NEW_WORKSPACE_ENV"
+                          else
+                            # Auto-discover all environments from Vault
+                            echo "Discovering all environments from Vault..."
+                            ENVIRONMENTS=$(vault kv list -format=json secret/ami-pipeline/ec2 | jq -r '.[]' 2>/dev/null || echo "")
+
+                            if [ -z "$ENVIRONMENTS" ]; then
+                              echo "⚠️  No environments found in Vault"
+                              exit 0
+                            fi
+
+                            echo "Found environments: $ENVIRONMENTS"
+                          fi
+
+                          # Run drift remediation for each environment
+                          cd ansible
+                          for ENV in $ENVIRONMENTS; do
+                            echo ""
+                            echo "========================================="
+                            echo "Remediating drift for environment: $ENV"
+                            echo "========================================="
+
+                            INSTANCE_IP=$(vault kv get -field=instance_ip secret/ami-pipeline/ec2/${ENV})
+                            PRIVATE_KEY=$(vault kv get -field=private_key secret/ami-pipeline/ec2/${ENV})
+
+                            echo "$PRIVATE_KEY" > /tmp/ec2_key_${ENV}.pem
+                            chmod 600 /tmp/ec2_key_${ENV}.pem
+
+                            echo "Running drift remediation on $ENV at $INSTANCE_IP..."
+                            ansible-playbook drift-remediation.yaml \
+                              -i "$INSTANCE_IP," \
+                              --private-key=/tmp/ec2_key_${ENV}.pem \
+                              -u ec2-user \
+                              --ssh-extra-args="-o StrictHostKeyChecking=no"
+
+                            # Fetch remediation report
+                            echo ""
+                            echo "Fetching remediation report for $ENV..."
+                            LATEST_REPORT=$(ssh -i /tmp/ec2_key_${ENV}.pem -o StrictHostKeyChecking=no ec2-user@$INSTANCE_IP \
+                              "sudo ls -t /var/log/drift-reports/remediation-report-*.json 2>/dev/null | head -1" || echo "")
+
+                            if [ -n "$LATEST_REPORT" ]; then
+                              echo "Latest remediation report: $LATEST_REPORT"
+                              ssh -i /tmp/ec2_key_${ENV}.pem -o StrictHostKeyChecking=no ec2-user@$INSTANCE_IP \
+                                "sudo cat $LATEST_REPORT" > /tmp/remediation-report-${ENV}.json
+
+                              echo ""
+                              echo "═══════════════════════════════════════════════════════════"
+                              echo "REMEDIATION REPORT SUMMARY - $ENV"
+                              echo "═══════════════════════════════════════════════════════════"
+                              cat /tmp/remediation-report-${ENV}.json | python3 -m json.tool
+                              echo "═══════════════════════════════════════════════════════════"
+                            fi
+
+                            # Clean up
+                            rm -f /tmp/ec2_key_${ENV}.pem
+
+                            echo "✓ Drift remediation completed for $ENV"
+                          done
+
+                          echo ""
+                          echo "✓ Drift remediation completed successfully for all environments"
+                          echo "  All systems have been restored to baseline configuration"

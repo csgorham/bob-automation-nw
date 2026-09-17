@@ -1,0 +1,24 @@
+name: Notify Harness on PR Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  trigger-harness:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Trigger Harness Pipeline
+        run: |
+          curl -X POST \
+            -H "x-api-key: ${{ secrets.HARNESS_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"branch":"main","repoIdentifier":"ami-pipeline"}' \
+            "https://app.harness.io/gateway/pipeline/api/webhook/triggerPipeline?accountIdentifier=${{ secrets.HARNESS_ACCOUNT_ID }}&orgIdentifier=default&projectIdentifier=${{ secrets.HARNESS_PROJECT_ID }}&targetBranchName=main"

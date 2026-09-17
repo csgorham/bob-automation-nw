@@ -1,0 +1,32 @@
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tfstate.*.backup
+.terraformrc
+terraform.rc
+
+# Sensitive files
+.env
+*.pem
+*.key
+
+# Packer build artifacts
+packer/manifest.json
+packer/packer_cache/
+
+# Ansible artifacts
+ansible/*.retry
+
+# OS / editor
+.DS_Store
+.vscode/
+*.swp
+*.swo
+
+# Restored working copy (temp dir from recovery)
+bob-automation-nw-restored/
+
+# Drift reports (runtime output)
+drift-report-latest.json
