@@ -222,11 +222,15 @@ pipeline:
                               applied)
                                 echo "✓ Run applied successfully"
 
+                                # Wait for state to be written
+                                sleep 5
+
                                 # For applied runs, read from current state version outputs
-                                BUCKET_EXISTS=$(curl -s \
+                                STATE_RESP=$(curl -s \
                                   -H "Authorization: Bearer $HCP_TOKEN" \
-                                  https://app.terraform.io/api/v2/workspaces/$WORKSPACE_ID/current-state-version-outputs \
-                                  | jq -r '.data[] | select(.attributes.name=="bucket_exists") | .attributes.value')
+                                  https://app.terraform.io/api/v2/workspaces/$WORKSPACE_ID/current-state-version-outputs)
+                                echo "State API response: $STATE_RESP" | head -c 500
+                                BUCKET_EXISTS=$(echo "$STATE_RESP" | jq -r '(.data // [])[] | select(.attributes.name=="bucket_exists") | .attributes.value' 2>/dev/null || echo "")
 
                                 echo "Bucket exists (from state): $BUCKET_EXISTS"
 
