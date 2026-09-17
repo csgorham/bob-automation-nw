@@ -1286,18 +1286,9 @@ pipeline:
                             microdnf install -y git python3 python3-pip unzip wget jq || true
                           fi
 
-                          if ! command -v ansible-playbook >/dev/null 2>&1; then
-                            if command -v pip3 >/dev/null 2>&1; then
-                              pip3 install --user ansible
-                            elif python3 -m ensurepip --help >/dev/null 2>&1; then
-                              python3 -m ensurepip --upgrade
-                              python3 -m pip install --user ansible
-                            else
-                              echo "ansible-playbook is required but pip is unavailable"
-                              exit 1
-                            fi
-                            export PATH="$HOME/.local/bin:$PATH"
-                          fi
+                          # Note: ansible runs remotely on the EC2 builder via Packer SSH provisioner
+                          # It does NOT need to be installed on the delegate
+                          echo "✓ Ansible runs remotely via Packer — no local install needed"
 
                           # Vault CLI
                           if ! /tmp/vault version >/dev/null 2>&1; then
