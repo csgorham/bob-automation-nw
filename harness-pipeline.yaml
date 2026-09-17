@@ -2228,39 +2228,40 @@ pipeline:
                           echo "Applying approved Terraform plan..."
                           echo "Run ID: $RUN_ID"
 
-                          # Check current status first
-                          CURRENT_STATUS=$(curl -s \
-                            -H "Authorization: Bearer $HCP_TOKEN" \
-                            https://app.terraform.io/api/v2/runs/$RUN_ID \
-                            | jq -r '.data.attributes.status' | tr -d '[:space:]')
+                          # Poll until the run is no longer pending/planning before attempting apply
+                          echo "Waiting for run to reach planned state..."
+                          for i in $(seq 1 60); do
+                            CURRENT_STATUS=$(curl -s \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              https://app.terraform.io/api/v2/runs/$RUN_ID \
+                              | jq -r '.data.attributes.status' | tr -d '[:space:]')
+                            echo "  [$i/60] status: $CURRENT_STATUS"
 
-                          echo "Current status: '$CURRENT_STATUS'"
+                            case "$CURRENT_STATUS" in
+                              planned|policy_checked|policy_override|cost_estimated)
+                                echo "✓ Run is ready to apply (status: $CURRENT_STATUS)"
+                                break
+                                ;;
+                              applied)
+                                echo "✓ EC2 infrastructure already applied"
+                                exit 0
+                                ;;
+                              planned_and_finished)
+                                echo "✓ EC2 plan shows no changes needed (already up-to-date)"
+                                exit 0
+                                ;;
+                              errored|canceled|discarded|force_canceled)
+                                echo "✗ Run in terminal error state: $CURRENT_STATUS"
+                                exit 1
+                                ;;
+                            esac
 
-                          # If already applied, skip
-                          if [[ "$CURRENT_STATUS" == "applied" ]]; then
-                            echo "✓ EC2 infrastructure already applied"
-                            echo "  Run has already been applied successfully"
-                            exit 0
-                          fi
-
-                          # If already finished (no changes), skip apply
-                          if [[ "$CURRENT_STATUS" == "planned_and_finished" ]]; then
-                            echo "✓ EC2 plan shows no changes needed (already up-to-date)"
-                            echo "  Skipping apply as infrastructure is already in desired state"
-                            exit 0
-                          fi
-
-                          # If run is in errored state, it can't be applied
-                          if [[ "$CURRENT_STATUS" == "errored" ]]; then
-                            echo "⚠️  Previous run is in errored state"
-                            echo "  Checking if error was due to duplicate security group rules..."
-
-                            # This likely means duplicate rules - infrastructure is probably correct
-                            echo "✓ Treating as success - infrastructure likely matches desired state"
-                            echo ""
-                            echo "ℹ️  Note: To create a fresh plan, trigger a new pipeline run"
-                            exit 0
-                          fi
+                            if [ "$i" -eq 60 ]; then
+                              echo "✗ Timed out waiting for run to reach planned state (last status: $CURRENT_STATUS)"
+                              exit 1
+                            fi
+                            sleep 10
+                          done
 
                           # Trigger apply on the approved plan
                           APPLY_RESPONSE=$(curl -s -X POST \
