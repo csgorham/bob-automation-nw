@@ -2208,6 +2208,9 @@ pipeline:
                       - name: RUN_ID
                         type: String
                         value: <+pipeline.stages.plan_ec2.spec.execution.steps.tf_plan_ec2.output.outputVariables.EC2_RUN_ID>
+                      - name: WORKSPACE_ID
+                        type: String
+                        value: ws-i7ApJ9RdDPvvEQVd
                     source:
                       type: Inline
                       spec:
@@ -2247,10 +2250,56 @@ pipeline:
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
 
                           echo "Applying approved Terraform plan..."
-                          echo "Run ID: $RUN_ID"
+                          echo "Run ID from plan stage: $RUN_ID"
+
+                          # Check if the run ID is stale (canceled/discarded/errored) —
+                          # this happens on Harness stage retries which reuse the old output variable.
+                          # If stale, look for a current planned run on the workspace or create a fresh one.
+                          INITIAL_STATUS=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            https://app.terraform.io/api/v2/runs/$RUN_ID \
+                            | jq -r '.data.attributes.status' | tr -d '[:space:]')
+                          echo "Initial run status: $INITIAL_STATUS"
+
+                          if [[ "$INITIAL_STATUS" == "canceled" ]] || [[ "$INITIAL_STATUS" == "discarded" ]] || [[ "$INITIAL_STATUS" == "errored" ]] || [[ "$INITIAL_STATUS" == "force_canceled" ]]; then
+                            echo "⚠ Run $RUN_ID is stale ($INITIAL_STATUS) — checking workspace for a current planned run..."
+
+                            # Look for an existing planned run on the workspace
+                            FRESH_RUN_ID=$(curl -s \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              "https://app.terraform.io/api/v2/workspaces/$WORKSPACE_ID/runs?page%5Bsize%5D=5" \
+                              | jq -r '[.data[] | select(.attributes.status | test("^(planned|policy_checked|policy_override|cost_estimated)$"))] | first | .id // empty')
+
+                            if [ -n "$FRESH_RUN_ID" ]; then
+                              echo "✓ Found existing planned run: $FRESH_RUN_ID — using it for apply"
+                              RUN_ID="$FRESH_RUN_ID"
+                            else
+                              echo "No planned run found — creating a fresh plan+apply run..."
+                              # Discard any pending/planning runs first
+                              BLOCKING=$(curl -s \
+                                -H "Authorization: Bearer $HCP_TOKEN" \
+                                "https://app.terraform.io/api/v2/workspaces/$WORKSPACE_ID/runs?page%5Bsize%5D=5" \
+                                | jq -r '[.data[] | select(.attributes.status | test("^(pending|planning)$")) | .id] | .[]')
+                              for BID in $BLOCKING; do
+                                curl -s -X POST -H "Authorization: Bearer $HCP_TOKEN" \
+                                  -H "Content-Type: application/vnd.api+json" \
+                                  "https://app.terraform.io/api/v2/runs/$BID/actions/cancel" \
+                                  -d '{"comment":"Cancelled by apply stage to unblock workspace"}' >/dev/null
+                              done
+                              [ -n "$BLOCKING" ] && sleep 10
+
+                              NEW_RUN=$(curl -s -X POST \
+                                -H "Authorization: Bearer $HCP_TOKEN" \
+                                -H "Content-Type: application/vnd.api+json" \
+                                -d "{\"data\":{\"attributes\":{\"message\":\"Fresh plan from apply stage (retry)\",\"auto-apply\":false},\"type\":\"runs\",\"relationships\":{\"workspace\":{\"data\":{\"type\":\"workspaces\",\"id\":\"$WORKSPACE_ID\"}}}}}" \
+                                https://app.terraform.io/api/v2/runs)
+                              RUN_ID=$(echo "$NEW_RUN" | jq -r '.data.id')
+                              echo "✓ Created fresh run: $RUN_ID"
+                            fi
+                          fi
 
                           # Poll until the run is no longer pending/planning before attempting apply
-                          echo "Waiting for run to reach planned state..."
+                          echo "Waiting for run $RUN_ID to reach planned state..."
                           for i in $(seq 1 60); do
                             CURRENT_STATUS=$(curl -s \
                               -H "Authorization: Bearer $HCP_TOKEN" \
