@@ -2897,10 +2897,11 @@ pipeline:
                           GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
                           GITHUB_REPO="<+pipeline.tags.github_repo>"
 
-                          # Clean up and clone
-                          rm -rf infra
+                          # Clean up any existing clone (both named target and bare repo dir)
+                          REPO_NAME=$(basename "$GITHUB_REPO" .git)
+                          rm -rf infra "$REPO_NAME"
                           echo "Cloning repository: $GITHUB_REPO"
-                          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git
+                          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git infra
                           cd infra
 
                           # Check if we should only simulate drift for the newly created workspace
@@ -3073,12 +3074,13 @@ pipeline:
                           # Get GitHub repository from pipeline tags
                           GITHUB_REPO="<+pipeline.tags.github_repo>"
 
-                          # Clean up any existing clone
-                          rm -rf infra
+                          # Clean up any existing clone (both named target and bare repo dir)
+                          REPO_NAME=$(basename "$GITHUB_REPO" .git)
+                          rm -rf infra "$REPO_NAME"
 
                           # Clone repo
                           echo "Cloning repository: $GITHUB_REPO"
-                          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git
+                          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git infra
                           cd infra
 
                           # Use newly created workspace if available, otherwise use pipeline variable
@@ -3296,10 +3298,11 @@ pipeline:
                           GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
                           GITHUB_REPO="<+pipeline.tags.github_repo>"
 
-                          # Clean up and clone
-                          rm -rf infra
+                          # Clean up any existing clone (both named target and bare repo dir)
+                          REPO_NAME=$(basename "$GITHUB_REPO" .git)
+                          rm -rf infra "$REPO_NAME"
                           echo "Cloning repository: $GITHUB_REPO"
-                          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git
+                          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git infra
                           cd infra
 
                           # Check if we should only remediate drift for the newly created workspace
