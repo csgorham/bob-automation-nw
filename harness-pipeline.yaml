@@ -143,7 +143,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -332,7 +332,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -439,7 +439,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -506,7 +506,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -633,7 +633,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -719,7 +719,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -901,7 +901,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -990,7 +990,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -1100,7 +1100,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -1256,7 +1256,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -1269,7 +1269,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/packer /tmp/packer.zip
                             curl -sL "https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_${ARCH}.zip" -o /tmp/packer.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/packer.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=50
                             dd if=/tmp/packer.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/packer 2>/dev/null || true
                             chmod +x /tmp/packer
                           fi
@@ -1534,7 +1534,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -1837,7 +1837,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -2044,7 +2044,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -2132,7 +2132,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -2338,7 +2338,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -2479,7 +2479,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -2699,7 +2699,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -2863,7 +2863,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -3078,7 +3078,7 @@ pipeline:
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
-                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
