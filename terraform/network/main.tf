@@ -118,7 +118,7 @@ output "vpc_id" {
   description = "VPC ID — consumed by ec2 workspace via remote state"
 }
 
-output "public_subnet_id" {
+output "subnet_id" {
   value       = aws_subnet.public.id
   description = "Public subnet ID — consumed by ec2 workspace via remote state"
 }

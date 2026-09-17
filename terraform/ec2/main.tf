@@ -120,7 +120,7 @@ resource "aws_security_group" "web" {
 resource "aws_instance" "web" {
   ami                         = data.hcp_packer_artifact.ami.external_identifier
   instance_type               = var.instance_config.instance_type
-  subnet_id                   = data.terraform_remote_state.network.outputs.public_subnet_id
+  subnet_id                   = data.terraform_remote_state.network.outputs.subnet_id
   vpc_security_group_ids      = [aws_security_group.web.id]
   associate_public_ip_address = true
 
