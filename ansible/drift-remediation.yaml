@@ -1,0 +1,42 @@
+---
+# EC2 Drift Remediation Playbook
+# Remediates detected configuration drift and restores baseline state
+# Can be run standalone or integrated into Harness pipeline
+
+- name: EC2 Drift Remediation
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    # Optional: Path to drift report file to use for targeted remediation
+    # drift_report_file: "/var/log/drift-reports/drift-report-XXXXX.json"
+
+  tasks:
+    - name: Display remediation start
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════════════
+          Starting EC2 Drift Remediation
+          ═══════════════════════════════════════════════════════════
+          Target: {{ inventory_hostname }}
+          Time: {{ ansible_date_time.iso8601 }}
+
+          ⚠️  WARNING: This will restore the system to baseline state
+          ═══════════════════════════════════════════════════════════
+
+    - name: Run drift remediation
+      ansible.builtin.include_role:
+        name: ec2_drift_remediation
+
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════════════
+          Drift Remediation Complete
+          ═══════════════════════════════════════════════════════════
+          System has been restored to baseline configuration
+          Reports saved to: /var/log/drift-reports/
+          ═══════════════════════════════════════════════════════════
+
+# Made with Bob

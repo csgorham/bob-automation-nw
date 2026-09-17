@@ -1,0 +1,9 @@
+---
+- name: Harden and configure AMI base
+  hosts: all
+  become: true
+
+  roles:
+    - update
+    - harden
+    - install_packages

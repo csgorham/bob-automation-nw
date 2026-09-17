@@ -1,0 +1,592 @@
+---
+# EC2 Drift Remediation Role
+# Remediates detected configuration drift and restores baseline state.
+# Emits a structured JSON remediation report for Bob triage.
+#
+# Output: /var/log/drift-reports/remediation-report-<epoch>.json
+#
+# Report schema (v1):
+#   schema_version      : "1"
+#   timestamp           : ISO-8601 string
+#   hostname            : string
+#   instance_id         : string
+#   drift_report_source : path of the drift report that triggered remediation,
+#                         or "standalone" when run without a drift report
+#   outcome             : "success" | "partial" | "no_action_needed"
+#   remediation_count   : integer — number of actions actually taken
+#   actions             : list of action objects
+#     action            : string — action identifier
+#     status            : "success" | "warning" | "failed"
+#     message           : string — human-readable summary
+#     detail            : any — action-specific context (optional)
+#     error             : string — error message on failure (optional)
+
+- name: Load baseline configuration
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/baseline-config.yaml"
+    name: baseline
+
+- name: Load drift report for targeted remediation
+  ansible.builtin.include_vars:
+    file: "{{ drift_report_file }}"
+    name: drift_data
+  when: drift_report_file is defined
+
+- name: Initialize remediation report
+  ansible.builtin.set_fact:
+    remediation_report:
+      schema_version: "1"
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+      hostname: "{{ ansible_hostname }}"
+      instance_id: "{{ ansible_ec2_instance_id | default('unknown') }}"
+      drift_report_source: "{{ drift_report_file | default('standalone') }}"
+      outcome: "no_action_needed"
+      remediation_count: 0
+      actions: []
+
+# ─────────────────────────────────────────────
+# Package Remediation
+# ─────────────────────────────────────────────
+- name: Get current installed packages
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Install missing required packages
+  ansible.builtin.yum:
+    name: "{{ baseline.baseline.required_packages | difference(ansible_facts.packages.keys()) }}"
+    state: present
+  register: packages_installed
+  when: baseline.baseline.required_packages | difference(ansible_facts.packages.keys()) | length > 0
+
+- name: Record package installation — success
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'install_packages',
+          'status': 'success',
+          'message': 'Missing required packages installed',
+          'detail': { 'packages': baseline.baseline.required_packages | difference(ansible_facts.packages.keys()) }
+        }]
+      }) }}
+  when:
+    - packages_installed is defined
+    - packages_installed.changed
+
+- name: Record package installation — failure
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'install_packages',
+          'status': 'failed',
+          'message': 'Failed to install required packages',
+          'detail': { 'packages': baseline.baseline.required_packages | difference(ansible_facts.packages.keys()) },
+          'error': packages_installed.msg | default('unknown error')
+        }]
+      }) }}
+  when:
+    - packages_installed is defined
+    - packages_installed.failed | default(false)
+
+- name: Remove forbidden packages
+  ansible.builtin.yum:
+    name: "{{ baseline.baseline.forbidden_packages | intersect(ansible_facts.packages.keys()) }}"
+    state: absent
+  register: packages_removed
+  when: baseline.baseline.forbidden_packages | intersect(ansible_facts.packages.keys()) | length > 0
+
+- name: Record package removal — success
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'remove_packages',
+          'status': 'success',
+          'message': 'Forbidden packages removed',
+          'detail': { 'packages': baseline.baseline.forbidden_packages | intersect(ansible_facts.packages.keys()) }
+        }]
+      }) }}
+  when:
+    - packages_removed is defined
+    - packages_removed.changed
+
+- name: Record package removal — failure
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'remove_packages',
+          'status': 'failed',
+          'message': 'Failed to remove forbidden packages',
+          'detail': { 'packages': baseline.baseline.forbidden_packages | intersect(ansible_facts.packages.keys()) },
+          'error': packages_removed.msg | default('unknown error')
+        }]
+      }) }}
+  when:
+    - packages_removed is defined
+    - packages_removed.failed | default(false)
+
+# ─────────────────────────────────────────────
+# Service Remediation
+# ─────────────────────────────────────────────
+- name: Ensure required services are in correct state
+  ansible.builtin.systemd:
+    name: "{{ item.name }}"
+    state: "{{ item.state }}"
+    enabled: "{{ item.enabled }}"
+  loop: "{{ baseline.baseline.required_services }}"
+  register: services_fixed
+
+- name: Record service remediation — changed
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'fix_service',
+          'status': 'success',
+          'message': 'Service state corrected',
+          'detail': {
+            'service': item.item.name,
+            'target_state': item.item.state,
+            'enabled': item.item.enabled
+          }
+        }]
+      }) }}
+  loop: "{{ services_fixed.results }}"
+  when: item.changed
+
+# ─────────────────────────────────────────────
+# Apache Web Server Remediation
+# ─────────────────────────────────────────────
+- name: Check current Apache service status
+  ansible.builtin.systemd:
+    name: httpd
+  register: apache_current_status
+  failed_when: false
+  changed_when: false
+
+- name: Ensure Apache is installed
+  ansible.builtin.yum:
+    name:
+      - httpd
+      - mod_ssl
+    state: present
+  register: apache_installed
+  when: "'httpd' not in ansible_facts.packages.keys()"
+
+- name: Record Apache installation — success
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'install_apache',
+          'status': 'success',
+          'message': 'Apache web server (httpd + mod_ssl) reinstalled'
+        }]
+      }) }}
+  when:
+    - apache_installed is defined
+    - apache_installed.changed
+
+- name: Start and enable Apache service
+  ansible.builtin.systemd:
+    name: httpd
+    state: started
+    enabled: true
+  register: apache_started
+  when:
+    - apache_current_status.status is defined
+    - apache_current_status.status.ActiveState != 'active'
+
+- name: Record Apache service restart — success
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'restart_apache',
+          'status': 'success',
+          'message': 'Apache web server restarted and enabled',
+          'detail': {
+            'previous_state': apache_current_status.status.ActiveState | default('unknown')
+          }
+        }]
+      }) }}
+  when:
+    - apache_started is defined
+    - apache_started.changed
+
+- name: Verify Apache is listening on port 80
+  ansible.builtin.wait_for:
+    host: localhost
+    port: 80
+    timeout: 30
+    state: started
+  register: apache_port_verify
+  failed_when: false
+
+- name: Record Apache port verification — success
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'verify_apache_port_80',
+          'status': 'success',
+          'message': 'Apache is accepting connections on port 80',
+          'detail': { 'port': 80 }
+        }]
+      }) }}
+  when: not (apache_port_verify.failed | default(false))
+
+- name: Record Apache port verification — failed
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'verify_apache_port_80',
+          'status': 'failed',
+          'message': 'Apache is still not accepting connections on port 80 after remediation',
+          'detail': { 'port': 80 },
+          'error': apache_port_verify.msg | default('connection timed out')
+        }]
+      }) }}
+  when: apache_port_verify.failed | default(false)
+
+- name: Check Apache configuration after remediation
+  ansible.builtin.command:
+    cmd: httpd -t
+  register: apache_config_verify
+  failed_when: false
+  changed_when: false
+
+- name: Record Apache configuration status
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'verify_apache_config',
+          'status': 'success' if apache_config_verify.rc == 0 else 'warning',
+          'message': 'Apache configuration syntax is valid' if apache_config_verify.rc == 0 else 'Apache configuration has syntax warnings — manual review needed',
+          'detail': { 'rc': apache_config_verify.rc, 'stderr': apache_config_verify.stderr_lines | default([]) }
+        }]
+      }) }}
+
+# ─────────────────────────────────────────────
+# Configuration File Remediation
+# ─────────────────────────────────────────────
+- name: Restore fail2ban configuration
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.local
+    content: |
+      [sshd]
+      enabled = true
+      port = ssh
+      logpath = /var/log/secure
+      maxretry = 3
+      bantime = 3600
+
+      [apache-auth]
+      enabled = true
+      port = http,https
+      logpath = /var/log/httpd/error_log
+      maxretry = 5
+      bantime = 3600
+    owner: root
+    group: root
+    mode: '0644'
+  register: fail2ban_restored
+  notify: Restart fail2ban
+
+- name: Record fail2ban config restoration
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'restore_config',
+          'status': 'success',
+          'message': 'fail2ban jail.local restored to baseline',
+          'detail': { 'file': '/etc/fail2ban/jail.local' }
+        }]
+      }) }}
+  when: fail2ban_restored.changed
+
+- name: Restore Apache index page
+  ansible.builtin.copy:
+    dest: /var/www/html/index.html
+    content: |
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>EC2 Server Launched</title>
+          <style>
+              body {
+                  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                  margin: 0;
+                  padding: 0;
+                  min-height: 100vh;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  position: relative;
+              }
+              .page-shell {
+                  width: 100%;
+                  max-width: 980px;
+                  padding: 20px;
+                  display: flex;
+                  justify-content: center;
+              }
+              .logo {
+                  position: fixed;
+                  top: 24px;
+                  left: 24px;
+                  max-width: 420px;
+                  width: 100%;
+                  height: auto;
+              }
+              .logo-inside {
+                  display: block;
+                  max-width: 180px;
+                  width: 100%;
+                  height: auto;
+                  margin: 0 0 20px 0;
+              }
+              .container {
+                  background: white;
+                  padding: 50px;
+                  border-radius: 20px;
+                  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                  max-width: 600px;
+                  text-align: center;
+              }
+              h1 { color: #667eea; font-size: 2.5em; margin-bottom: 20px; }
+              .status {
+                  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                  color: white;
+                  padding: 20px;
+                  border-radius: 10px;
+                  margin: 30px 0;
+                  font-size: 1.2em;
+              }
+              .details {
+                  background: #f8f9fa;
+                  padding: 20px;
+                  border-radius: 10px;
+                  margin: 20px 0;
+                  text-align: left;
+              }
+              .details p { margin: 10px 0; color: #555; }
+              .details strong { color: #333; }
+              .emoji { font-size: 4em; margin-bottom: 20px; }
+          </style>
+      </head>
+      <body>
+          <img
+              class="logo"
+              src="https://www.experian.com/static/shared/logos/logo-experian.svg"
+              alt="Experian logo"
+          />
+          <div class="page-shell">
+              <div class="container">
+              <h1>🚀 EC2 Server Successfully Launched!</h1>
+              <div class="status">✅ Your server is up and running</div>
+              <div class="details">
+                  <p><strong>🖥️ Hostname:</strong> {{ ansible_hostname }}</p>
+                  <p><strong>🔧 Configured by:</strong> Ansible Automation</p>
+                  <p><strong>🚀 Deployed via:</strong> Harness CI/CD Pipeline</p>
+                  <p><strong>📦 AMI:</strong> Custom Hardened Image</p>
+              </div>
+              <p style="color: #666; margin-top: 30px;">
+                  This instance was automatically provisioned and configured with security best practices.
+              </p>
+          </div>
+          </div>
+      </body>
+      </html>
+    owner: root
+    group: root
+    mode: '0644'
+  register: index_restored
+
+- name: Record index page restoration
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'restore_config',
+          'status': 'success',
+          'message': 'Apache index.html restored to baseline',
+          'detail': { 'file': '/var/www/html/index.html' }
+        }]
+      }) }}
+  when: index_restored.changed
+
+- name: Fix configuration file permissions
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop: "{{ baseline.baseline.config_files }}"
+  register: permissions_fixed
+
+- name: Record permission fixes
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'fix_permissions',
+          'status': 'success',
+          'message': 'File permissions restored to baseline',
+          'detail': {
+            'file': item.item.path,
+            'owner': item.item.owner,
+            'group': item.item.group,
+            'mode': item.item.mode
+          }
+        }]
+      }) }}
+  loop: "{{ permissions_fixed.results }}"
+  when: item.changed
+
+# ─────────────────────────────────────────────
+# AIDE Database Remediation
+# ─────────────────────────────────────────────
+- name: Check if AIDE database exists
+  ansible.builtin.stat:
+    path: "{{ baseline.baseline.aide.database }}"
+  register: aide_db
+
+- name: Reinitialize AIDE database if missing or corrupted
+  block:
+    - name: Initialize new AIDE database
+      ansible.builtin.command:
+        cmd: aide --init
+      register: aide_init
+
+    - name: Move new AIDE database to production
+      ansible.builtin.command:
+        cmd: mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+      when: aide_init.rc == 0
+
+    - name: Record AIDE remediation — success
+      ansible.builtin.set_fact:
+        remediation_report: >-
+          {{ remediation_report | combine({
+            'actions': remediation_report.actions + [{
+              'action': 'reinitialize_aide',
+              'status': 'success',
+              'message': 'AIDE integrity database reinitialized'
+            }]
+          }) }}
+      when: aide_init.rc == 0
+
+    - name: Record AIDE remediation — failure
+      ansible.builtin.set_fact:
+        remediation_report: >-
+          {{ remediation_report | combine({
+            'actions': remediation_report.actions + [{
+              'action': 'reinitialize_aide',
+              'status': 'failed',
+              'message': 'AIDE --init failed; manual intervention required',
+              'error': aide_init.stderr | default('unknown error')
+            }]
+          }) }}
+      when: aide_init.rc != 0
+  when: >
+    not aide_db.stat.exists or
+    (drift_data is defined and
+     drift_data.drifts | selectattr('type', 'equalto', 'file_integrity_violation') | list | length > 0)
+
+# ─────────────────────────────────────────────
+# Security Hardening Re-application
+# ─────────────────────────────────────────────
+- name: Ensure SSH is properly configured
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    - { regexp: '^PermitRootLogin',        line: 'PermitRootLogin no' }
+    - { regexp: '^PasswordAuthentication', line: 'PasswordAuthentication no' }
+    - { regexp: '^X11Forwarding',          line: 'X11Forwarding no' }
+  register: sshd_config_fixed
+  notify: Restart sshd
+
+- name: Record SSH hardening
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'actions': remediation_report.actions + [{
+          'action': 'harden_ssh',
+          'status': 'success',
+          'message': 'SSH hardening directives restored in sshd_config'
+        }]
+      }) }}
+  when: sshd_config_fixed.changed
+
+# ─────────────────────────────────────────────
+# Finalize Outcome and Generate Remediation Report
+# ─────────────────────────────────────────────
+- name: Compute remediation outcome
+  ansible.builtin.set_fact:
+    _failed_actions:  "{{ remediation_report.actions | selectattr('status', 'equalto', 'failed')  | list }}"
+    _success_actions: "{{ remediation_report.actions | selectattr('status', 'in', ['success', 'warning']) | list }}"
+
+- name: Stamp outcome and remediation_count into report
+  ansible.builtin.set_fact:
+    remediation_report: >-
+      {{ remediation_report | combine({
+        'remediation_count': remediation_report.actions | length,
+        'outcome': (
+          'no_action_needed' if remediation_report.actions | length == 0
+          else ('partial' if _failed_actions | length > 0 else 'success')
+        )
+      }) }}
+
+- name: Create drift reports directory
+  ansible.builtin.file:
+    path: /var/log/drift-reports
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Save remediation report to file
+  ansible.builtin.copy:
+    content: "{{ remediation_report | to_nice_json }}"
+    dest: "/var/log/drift-reports/remediation-report-{{ ansible_date_time.epoch }}.json"
+    mode: '0644'
+  become: true
+
+- name: Display remediation summary
+  ansible.builtin.debug:
+    msg: |
+      ═══════════════════════════════════════════════════════════
+      DRIFT REMEDIATION SUMMARY
+      ═══════════════════════════════════════════════════════════
+      Hostname:     {{ ansible_hostname }}
+      Instance ID:  {{ ansible_ec2_instance_id | default('unknown') }}
+      Timestamp:    {{ ansible_date_time.iso8601 }}
+      Source Report: {{ remediation_report.drift_report_source }}
+
+      Outcome:            {{ remediation_report.outcome | upper }}
+      Total Actions Taken: {{ remediation_report.remediation_count }}
+        Successful: {{ remediation_report.actions | selectattr('status', 'equalto', 'success') | list | length }}
+        Warnings:   {{ remediation_report.actions | selectattr('status', 'equalto', 'warning') | list | length }}
+        Failed:     {{ remediation_report.actions | selectattr('status', 'equalto', 'failed')  | list | length }}
+
+      {% if remediation_report.actions | length > 0 %}
+      Remediation Actions:
+      {% for action in remediation_report.actions %}
+      - [{{ action.status | upper }}] {{ action.action }}: {{ action.message }}
+        {% if action.error is defined %}  ERROR: {{ action.error }}{% endif %}
+      {% endfor %}
+      {% else %}
+      No remediation actions were necessary — system already at baseline
+      {% endif %}
+
+      Reports saved to: /var/log/drift-reports/
+      ═══════════════════════════════════════════════════════════
+
+# Made with Bob

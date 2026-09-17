@@ -1,0 +1,26 @@
+# mock-tfplan-v2-fail.sentinel
+# Simulates a Terraform plan that FAILS restrict-instance-types:
+# Developer tried to provision a c5.4xlarge — not in the allowed list.
+# Expected Bob response: "BLOCKED — c5.4xlarge is not in the approved type list.
+#   Allowed types: t2.micro, t2.small, t3.micro, t3.small"
+
+resource_changes = {
+  "aws_instance.web": {
+    "address": "aws_instance.web",
+    "type":    "aws_instance",
+    "mode":    "managed",
+    "change": {
+      "actions": ["create"],
+      "before":  null,
+      "after": {
+        "instance_type": "c5.4xlarge",
+        "ami":           "ami-0abcdef1234567890",
+        "tags": {
+          "Name":        "ami-pipeline-instance-dev",
+          "Pipeline":    "golden-workflow",
+          "Environment": "Development",
+        },
+      },
+    },
+  },
+}

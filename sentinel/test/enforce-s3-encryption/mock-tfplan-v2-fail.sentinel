@@ -1,0 +1,28 @@
+# mock-tfplan-v2-fail.sentinel
+# Simulates a Terraform plan that FAILS enforce-s3-encryption:
+# S3 bucket is declared but NO server-side encryption configuration is present.
+# Expected Bob response: "BLOCKED — aws_s3_bucket.artifacts does not have
+#   encryption enabled.  Add an aws_s3_bucket_server_side_encryption_configuration
+#   resource before merging."
+
+# NOTE: aws_s3_bucket_server_side_encryption_configuration is intentionally
+# absent — this is the violation that triggers the policy failure.
+resource_changes = {
+  "aws_s3_bucket.artifacts": {
+    "address": "aws_s3_bucket.artifacts",
+    "type":    "aws_s3_bucket",
+    "mode":    "managed",
+    "change": {
+      "actions": ["create"],
+      "before":  null,
+      "after": {
+        "bucket": "golden-workflow-artifacts-dev",
+        "tags": {
+          "Name":        "golden-workflow-artifacts-dev",
+          "Pipeline":    "golden-workflow",
+          "Environment": "Development",
+        },
+      },
+    },
+  },
+}

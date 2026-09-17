@@ -1,0 +1,39 @@
+---
+# EC2 Drift Detection Playbook
+# Detects configuration drift from baseline state
+# Can be run standalone or integrated into Harness pipeline
+
+- name: EC2 Drift Detection
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    # Set to true to fail the playbook if critical drift is detected
+    fail_on_drift: false
+
+  tasks:
+    - name: Display drift detection start
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════════════
+          Starting EC2 Drift Detection
+          ═══════════════════════════════════════════════════════════
+          Target: {{ inventory_hostname }}
+          Time: {{ ansible_date_time.iso8601 }}
+          ═══════════════════════════════════════════════════════════
+
+    - name: Run drift detection
+      ansible.builtin.include_role:
+        name: ec2_drift_detection
+
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════════════
+          Drift Detection Complete
+          ═══════════════════════════════════════════════════════════
+          Reports saved to: /var/log/drift-reports/
+          ═══════════════════════════════════════════════════════════
+
+# Made with Bob

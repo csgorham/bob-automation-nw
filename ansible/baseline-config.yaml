@@ -1,0 +1,76 @@
+---
+# EC2 Baseline Configuration
+# This file defines the expected "golden state" for EC2 instances
+# Used by drift detection to identify unauthorized changes
+
+baseline:
+  # Expected packages that should be installed
+  required_packages:
+    - httpd
+    - aide
+    - fail2ban
+    - chrony
+    - htop
+    - net-tools
+
+  # Packages that should NOT be present (blacklist)
+  forbidden_packages:
+    - telnet
+    - rsh
+    - rsh-server
+    - ypbind
+    - ypserv
+    - tftp
+    - tftp-server
+    - talk
+    - talk-server
+
+  # Expected services and their states
+  required_services:
+    - name: httpd
+      state: started
+      enabled: true
+    - name: fail2ban
+      state: started
+      enabled: true
+    - name: chronyd
+      state: started
+      enabled: true
+
+  # Critical configuration files to monitor
+  config_files:
+    - path: /etc/fail2ban/jail.local
+      owner: root
+      group: root
+      mode: '0644'
+    - path: /var/www/html/index.html
+      owner: root
+      group: root
+      mode: '0644'
+    - path: /etc/ssh/sshd_config
+      owner: root
+      group: root
+      mode: '0600'
+
+  # Expected system users (beyond default)
+  allowed_users:
+    - ec2-user
+    - apache
+
+  # Ports that should be open
+  expected_ports:
+    - 22   # SSH
+    - 80   # HTTP
+    - 443  # HTTPS
+
+  # AIDE database location
+  aide:
+    database: /var/lib/aide/aide.db.gz
+    check_integrity: true
+
+  # Security settings
+  security:
+    selinux_mode: enforcing  # or permissive/disabled based on your setup
+    firewalld_enabled: false  # Set based on your configuration
+
+# Made with Bob

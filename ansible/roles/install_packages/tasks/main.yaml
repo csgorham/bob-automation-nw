@@ -1,0 +1,236 @@
+---
+- name: Install Apache web server and SSL module
+  ansible.builtin.yum:
+    name:
+      - httpd
+      - mod_ssl
+    state: present
+
+- name: Load port configuration from YAML for Apache
+  ansible.builtin.set_fact:
+    ports_config_apache: "{{ lookup('file', playbook_dir + '/../terraform/ec2/ports.yaml') | from_yaml }}"
+
+- name: Configure Apache to listen on all HTTP ports dynamically
+  ansible.builtin.lineinfile:
+    path: /etc/httpd/conf/httpd.conf
+    line: "Listen {{ item.port }}"
+    insertafter: '^Listen 80'
+    state: present
+  loop: "{{ ports_config_apache.ingress_ports }}"
+  when: item.port not in [22, 80, 443]  # Skip SSH, default HTTP, and HTTPS
+  notify: Restart Apache
+
+- name: Generate self-signed SSL certificate
+  ansible.builtin.command:
+    cmd: >
+      openssl req -x509 -nodes -days 365 -newkey rsa:2048
+      -keyout /etc/pki/tls/private/apache-selfsigned.key
+      -out /etc/pki/tls/certs/apache-selfsigned.crt
+      -subj "/C=US/ST=State/L=City/O=Organization/CN={{ ansible_default_ipv4.address }}"
+    creates: /etc/pki/tls/certs/apache-selfsigned.crt
+
+- name: Configure SSL certificate in Apache
+  ansible.builtin.lineinfile:
+    path: /etc/httpd/conf.d/ssl.conf
+    regexp: '^SSLCertificateFile'
+    line: 'SSLCertificateFile /etc/pki/tls/certs/apache-selfsigned.crt'
+    state: present
+
+- name: Configure SSL key in Apache
+  ansible.builtin.lineinfile:
+    path: /etc/httpd/conf.d/ssl.conf
+    regexp: '^SSLCertificateKeyFile'
+    line: 'SSLCertificateKeyFile /etc/pki/tls/private/apache-selfsigned.key'
+    state: present
+
+- name: Ensure Apache is started and enabled
+  ansible.builtin.systemd:
+    name: httpd
+    state: started
+    enabled: true
+
+- name: Restart Apache to apply port configuration
+  ansible.builtin.systemd:
+    name: httpd
+    state: restarted
+  when: ports_config_apache is defined
+
+- name: Flush handlers
+  meta: flush_handlers
+
+- name: Create a simple index page
+  ansible.builtin.copy:
+    dest: /var/www/html/index.html
+    content: |
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>EC2 Server Launched</title>
+          <style>
+              body {
+                  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                  margin: 0;
+                  padding: 0;
+                  /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
+                  min-height: 100vh;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  position: relative;
+              }
+              .page-shell {
+                  width: 100%;
+                  max-width: 980px;
+                  padding: 20px;
+                  display: flex;
+                  justify-content: center;
+              }
+              .logo {
+                  position: fixed;
+                  top: 24px;
+                  left: 24px;
+                  max-width: 420px;
+                  width: 100%;
+                  height: auto;
+              }
+              .logo-inside {
+                  display: block;
+                  max-width: 180px;
+                  width: 100%;
+                  height: auto;
+                  margin: 0 0 20px 0;
+              }
+              .container {
+                  background: white;
+                  padding: 50px;
+                  border-radius: 20px;
+                  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                  max-width: 600px;
+                  text-align: center;
+              }
+              h1 {
+                  color: #667eea;
+                  font-size: 2.5em;
+                  margin-bottom: 20px;
+              }
+              .status {
+                  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                  color: white;
+                  padding: 20px;
+                  border-radius: 10px;
+                  margin: 30px 0;
+                  font-size: 1.2em;
+              }
+              .details {
+                  background: #f8f9fa;
+                  padding: 20px;
+                  border-radius: 10px;
+                  margin: 20px 0;
+                  text-align: left;
+              }
+              .details p {
+                  margin: 10px 0;
+                  color: #555;
+              }
+              .details strong {
+                  color: #333;
+              }
+              .emoji {
+                  font-size: 4em;
+                  margin-bottom: 20px;
+              }
+          </style>
+      </head>
+      <body>
+          <img
+              class="logo"
+              src="https://www.experian.com/static/shared/logos/logo-experian.svg"
+              alt="Experian logo"
+          />
+          <div class="page-shell">
+              <div class="container">
+
+              <h1>🚀 EC2 Server Successfully Launched!</h1>
+              <div class="status">
+                  ✅ Your server is up and running
+              </div>
+              <div class="details">
+                  <p><strong>🖥️ Hostname:</strong> {{ ansible_hostname }}</p>
+                  <p><strong>🔧 Configured by:</strong> Ansible Automation</p>
+                  <p><strong>🚀 Deployed via:</strong> Harness CI/CD Pipeline</p>
+                  <p><strong>📦 AMI:</strong> Custom Hardened Image</p>
+              </div>
+              <p style="color: #666; margin-top: 30px;">
+                  This instance was automatically provisioned and configured with security best practices.
+              </p>
+          </div>
+          </div>
+      </body>
+      </html>
+    mode: '0644'
+
+- name: Install security and monitoring tools
+  ansible.builtin.yum:
+    name:
+      - aide              # Intrusion detection
+      - fail2ban          # Brute force protection
+      - chrony            # Time synchronization
+      - htop              # System monitoring
+      - net-tools         # Network utilities
+    state: present
+
+- name: Start and enable fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: started
+    enabled: true
+
+- name: Start and enable chrony
+  ansible.builtin.systemd:
+    name: chronyd
+    state: started
+    enabled: true
+
+- name: Configure fail2ban for SSH and HTTP
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.local
+    content: |
+      [sshd]
+      enabled = true
+      port = ssh
+      logpath = /var/log/secure
+      maxretry = 3
+      bantime = 3600
+
+      [apache-auth]
+      enabled = true
+      port = http,https
+      logpath = /var/log/httpd/error_log
+      maxretry = 5
+      bantime = 3600
+    mode: '0644'
+  notify: Restart fail2ban
+
+- name: Load port configuration from YAML
+  ansible.builtin.set_fact:
+    ports_config: "{{ lookup('file', playbook_dir + '/../terraform/ec2/ports.yaml') | from_yaml }}"
+
+- name: Open ports in firewall dynamically (if firewalld is running)
+  ansible.builtin.firewalld:
+    port: "{{ item.port }}/tcp"
+    permanent: true
+    state: enabled
+    immediate: true
+  loop: "{{ ports_config.ingress_ports }}"
+  ignore_errors: true
+
+
+- name: Initialize AIDE database
+  ansible.builtin.command:
+    cmd: aide --init
+    creates: /var/lib/aide/aide.db.new.gz
+
+- name: Move AIDE database to production
+  ansible.builtin.command:
+    cmd: mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+    creates: /var/lib/aide/aide.db.gz

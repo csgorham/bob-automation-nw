@@ -1,0 +1,24 @@
+# mock-tfplan-v2-pass.sentinel
+# Simulates a Terraform plan that PASSES restrict-instance-types:
+# EC2 instance uses t3.micro, which is in the allowed list.
+
+resource_changes = {
+  "aws_instance.web": {
+    "address": "aws_instance.web",
+    "type":    "aws_instance",
+    "mode":    "managed",
+    "change": {
+      "actions": ["create"],
+      "before":  null,
+      "after": {
+        "instance_type": "t3.micro",
+        "ami":           "ami-0abcdef1234567890",
+        "tags": {
+          "Name":        "ami-pipeline-instance-dev",
+          "Pipeline":    "golden-workflow",
+          "Environment": "Development",
+        },
+      },
+    },
+  },
+}

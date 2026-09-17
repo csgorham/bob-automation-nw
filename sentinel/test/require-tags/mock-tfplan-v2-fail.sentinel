@@ -1,0 +1,23 @@
+# mock-tfplan-v2-fail.sentinel
+# Simulates a Terraform plan that FAILS require-tags:
+# EC2 instance is missing the mandatory "Pipeline" and "Environment" tags.
+
+# Missing: "Pipeline" and "Environment" tags — policy will FAIL
+resource_changes = {
+  "aws_instance.web": {
+    "address": "aws_instance.web",
+    "type":    "aws_instance",
+    "mode":    "managed",
+    "change": {
+      "actions": ["create"],
+      "before":  null,
+      "after": {
+        "instance_type": "t3.micro",
+        "ami":           "ami-0abcdef1234567890",
+        "tags": {
+          "Name": "ami-pipeline-instance-dev",
+        },
+      },
+    },
+  },
+}

@@ -1,0 +1,75 @@
+---
+# Simulate Apache Drift Playbook
+# This playbook simulates Apache web server going down to test drift detection
+# Run this AFTER initial configuration to create a drift scenario
+
+- name: Simulate Apache Web Server Drift
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Display simulation start
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════════════
+          SIMULATING APACHE WEB SERVER DRIFT
+          ═══════════════════════════════════════════════════════════
+          This will stop the Apache service to simulate a drift scenario
+          where the web server has gone down unexpectedly.
+
+          After running this, execute drift-detection.yaml to detect
+          the issue, then drift-remediation.yaml to fix it.
+          ═══════════════════════════════════════════════════════════
+
+    - name: Stop Apache web server (simulating crash/failure)
+      ansible.builtin.systemd:
+        name: httpd
+        state: stopped
+      register: apache_stopped
+
+    - name: Disable Apache from auto-starting (simulating misconfiguration)
+      ansible.builtin.systemd:
+        name: httpd
+        enabled: false
+      register: apache_disabled
+
+    - name: Verify Apache is actually stopped
+      ansible.builtin.systemd:
+        name: httpd
+      register: apache_status
+
+    - name: Tamper with Apache config to simulate configuration drift
+      ansible.builtin.lineinfile:
+        path: /etc/httpd/conf/httpd.conf
+        line: "# DRIFT: This line was added to simulate configuration drift"
+        insertafter: EOF
+        state: present
+
+    - name: Install unauthorized package (telnet) to simulate forbidden software
+      ansible.builtin.package:
+        name: telnet
+        state: present
+
+    - name: Display drift simulation results
+      ansible.builtin.debug:
+        msg: |
+          ═══════════════════════════════════════════════════════════
+          ALL 3 DRIFT VECTORS INJECTED
+          ═══════════════════════════════════════════════════════════
+          Vector 1 — Service drift:
+            - httpd stopped and disabled (expected: started, enabled)
+
+          Vector 2 — Config drift:
+            - /etc/httpd/conf/httpd.conf tampered (line appended)
+
+          Vector 3 — Unauthorized package:
+            - telnet installed (baseline: forbidden_packages)
+
+          Next Steps:
+          1. Run drift-detection.yaml to detect all three vectors
+          2. Review the JSON report in /var/log/drift-reports/
+          3. Run drift-remediation.yaml to restore golden state
+          ═══════════════════════════════════════════════════════════
+
+# Made with Bob

@@ -1,0 +1,396 @@
+---
+# EC2 Drift Detection Role
+# Detects configuration drift from baseline state and emits a structured JSON
+# report consumable by Bob and external triage tooling.
+#
+# Output: /var/log/drift-reports/drift-report-<epoch>.json
+#
+# Report schema (v1):
+#   schema_version   : "1"
+#   timestamp        : ISO-8601 string
+#   hostname         : string
+#   instance_id      : string
+#   drift_detected   : boolean
+#   drift_count      : integer  — total number of drift items
+#   has_critical     : boolean  — true when any drift.severity == "critical"
+#   summary:
+#     critical       : integer
+#     high           : integer
+#     medium         : integer
+#     low            : integer
+#   drifts           : list of drift objects (see per-check comments for fields)
+
+- name: Load baseline configuration
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/baseline-config.yaml"
+    name: baseline
+
+- name: Initialize drift report
+  ansible.builtin.set_fact:
+    drift_detected: false
+    drift_report:
+      schema_version: "1"
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+      hostname: "{{ ansible_hostname }}"
+      instance_id: "{{ ansible_ec2_instance_id | default('unknown') }}"
+      drift_detected: false
+      drift_count: 0
+      has_critical: false
+      summary:
+        critical: 0
+        high: 0
+        medium: 0
+        low: 0
+      drifts: []
+
+# ─────────────────────────────────────────────
+# Package Drift Detection
+# Fields: type, severity, details (list of package names)
+# ─────────────────────────────────────────────
+- name: Get list of installed packages
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Check for missing required packages
+  ansible.builtin.set_fact:
+    missing_packages: "{{ baseline.baseline.required_packages | difference(ansible_facts.packages.keys()) }}"
+
+- name: Check for forbidden packages
+  ansible.builtin.set_fact:
+    forbidden_found: "{{ baseline.baseline.forbidden_packages | intersect(ansible_facts.packages.keys()) }}"
+
+- name: Record missing packages drift
+  ansible.builtin.set_fact:
+    drift_detected: true
+    drift_report: >-
+      {{ drift_report | combine({
+        'drifts': drift_report.drifts + [{
+          'type': 'missing_packages',
+          'severity': 'high',
+          'details': missing_packages
+        }]
+      }) }}
+  when: missing_packages | length > 0
+
+- name: Record forbidden packages drift
+  ansible.builtin.set_fact:
+    drift_detected: true
+    drift_report: >-
+      {{ drift_report | combine({
+        'drifts': drift_report.drifts + [{
+          'type': 'forbidden_packages',
+          'severity': 'critical',
+          'details': forbidden_found
+        }]
+      }) }}
+  when: forbidden_found | length > 0
+
+# ─────────────────────────────────────────────
+# Service State Drift Detection
+# Fields: type, severity, service, expected_state, expected_enabled,
+#         actual_state, actual_enabled
+# ─────────────────────────────────────────────
+- name: Check service states
+  ansible.builtin.systemd:
+    name: "{{ item.name }}"
+  register: service_status
+  loop: "{{ baseline.baseline.required_services }}"
+  failed_when: false
+  changed_when: false
+
+- name: Detect service drift
+  ansible.builtin.set_fact:
+    drift_detected: true
+    drift_report: >-
+      {{ drift_report | combine({
+        'drifts': drift_report.drifts + [{
+          'type': 'service_drift',
+          'severity': 'high',
+          'service': item.item.name,
+          'expected_state': item.item.state,
+          'expected_enabled': item.item.enabled,
+          'actual_state': item.status.ActiveState | default('unknown'),
+          'actual_enabled': item.status.UnitFileState | default('unknown')
+        }]
+      }) }}
+  loop: "{{ service_status.results }}"
+  when: >
+    (item.item.state == 'started' and item.status.ActiveState != 'active') or
+    (item.item.enabled and item.status.UnitFileState != 'enabled')
+
+# ─────────────────────────────────────────────
+# Apache Web Server Specific Checks
+# Fields (down): type, severity, service, expected_state, actual_state, message
+# Fields (port):  type, severity, port, message
+# Fields (config): type, severity, message, details (stderr lines)
+# ─────────────────────────────────────────────
+- name: Check Apache service detailed status
+  ansible.builtin.systemd:
+    name: httpd
+  register: apache_status
+  failed_when: false
+  changed_when: false
+
+- name: Detect Apache service down (critical drift)
+  ansible.builtin.set_fact:
+    drift_detected: true
+    drift_report: >-
+      {{ drift_report | combine({
+        'drifts': drift_report.drifts + [{
+          'type': 'apache_service_down',
+          'severity': 'critical',
+          'service': 'httpd',
+          'expected_state': 'active',
+          'actual_state': apache_status.status.ActiveState | default('unknown'),
+          'message': 'Apache web server is not running - service may have crashed or been stopped'
+        }]
+      }) }}
+  when:
+    - apache_status.status is defined
+    - apache_status.status.ActiveState != 'active'
+
+- name: Check if Apache is listening on port 80
+  ansible.builtin.wait_for:
+    host: localhost
+    port: 80
+    timeout: 5
+    state: started
+  register: apache_port_check
+  failed_when: false
+  changed_when: false
+
+- name: Detect Apache not listening on port 80
+  ansible.builtin.set_fact:
+    drift_detected: true
+    drift_report: >-
+      {{ drift_report | combine({
+        'drifts': drift_report.drifts + [{
+          'type': 'apache_port_not_listening',
+          'severity': 'critical',
+          'port': 80,
+          'message': 'Apache is not accepting connections on port 80'
+        }]
+      }) }}
+  when: apache_port_check.failed | default(false)
+
+- name: Check Apache configuration syntax
+  ansible.builtin.command:
+    cmd: httpd -t
+  register: apache_config_check
+  failed_when: false
+  changed_when: false
+
+- name: Detect Apache configuration errors
+  ansible.builtin.set_fact:
+    drift_detected: true
+    drift_report: >-
+      {{ drift_report | combine({
+        'drifts': drift_report.drifts + [{
+          'type': 'apache_config_error',
+          'severity': 'high',
+          'message': 'Apache configuration has syntax errors',
+          'details': apache_config_check.stderr_lines | default([])
+        }]
+      }) }}
+  when: apache_config_check.rc != 0
+
+# ─────────────────────────────────────────────
+# Configuration File Drift Detection
+# Fields (missing): type, severity, file
+# Fields (perms):   type, severity, file, expected_mode, actual_mode,
+#                   expected_owner, actual_owner, expected_group, actual_group
+# ─────────────────────────────────────────────
+- name: Check configuration files
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  register: config_files_stat
+  loop: "{{ baseline.baseline.config_files }}"
+
+- name: Detect missing configuration files
+  ansible.builtin.set_fact:
+    drift_detected: true
+    drift_report: >-
+      {{ drift_report | combine({
+        'drifts': drift_report.drifts + [{
+          'type': 'missing_config_file',
+          'severity': 'high',
+          'file': item.item.path
+        }]
+      }) }}
+  loop: "{{ config_files_stat.results }}"
+  when: not item.stat.exists
+
+- name: Detect configuration file permission drift
+  ansible.builtin.set_fact:
+    drift_detected: true
+    drift_report: >-
+      {{ drift_report | combine({
+        'drifts': drift_report.drifts + [{
+          'type': 'config_file_permissions',
+          'severity': 'medium',
+          'file': item.item.path,
+          'expected_mode': item.item.mode,
+          'actual_mode': item.stat.mode,
+          'expected_owner': item.item.owner,
+          'actual_owner': item.stat.pw_name,
+          'expected_group': item.item.group,
+          'actual_group': item.stat.gr_name
+        }]
+      }) }}
+  loop: "{{ config_files_stat.results }}"
+  when:
+    - item.stat.exists
+    - (item.stat.mode != item.item.mode) or
+      (item.stat.pw_name != item.item.owner) or
+      (item.stat.gr_name != item.item.group)
+
+# ─────────────────────────────────────────────
+# AIDE Integrity Check
+# Fields: type, severity, details, aide_output (list of strings)
+# ─────────────────────────────────────────────
+- name: Check if AIDE database exists
+  ansible.builtin.stat:
+    path: "{{ baseline.baseline.aide.database }}"
+  register: aide_db
+
+- name: Run AIDE integrity check
+  ansible.builtin.command:
+    cmd: aide --check
+  register: aide_check
+  failed_when: false
+  changed_when: false
+  when:
+    - aide_db.stat.exists
+    - baseline.baseline.aide.check_integrity
+
+- name: Detect AIDE integrity drift
+  ansible.builtin.set_fact:
+    drift_detected: true
+    drift_report: >-
+      {{ drift_report | combine({
+        'drifts': drift_report.drifts + [{
+          'type': 'file_integrity_violation',
+          'severity': 'critical',
+          'details': 'AIDE detected file system changes',
+          'aide_output': aide_check.stdout_lines | default([])
+        }]
+      }) }}
+  when:
+    - aide_db.stat.exists
+    - baseline.baseline.aide.check_integrity
+    - aide_check.rc != 0
+
+# ─────────────────────────────────────────────
+# Network Port Drift Detection
+# Fields: type, severity, details (list of unexpected port integers)
+# ─────────────────────────────────────────────
+- name: Get listening ports
+  ansible.builtin.shell: |
+    ss -tuln | awk 'NR>1 {print $5}' | sed 's/.*://' | sort -u
+  register: listening_ports
+  changed_when: false
+
+- name: Check for unexpected open ports
+  ansible.builtin.set_fact:
+    unexpected_ports: "{{ listening_ports.stdout_lines | map('int') | difference(baseline.baseline.expected_ports) }}"
+
+- name: Record unexpected ports drift
+  ansible.builtin.set_fact:
+    drift_detected: true
+    drift_report: >-
+      {{ drift_report | combine({
+        'drifts': drift_report.drifts + [{
+          'type': 'unexpected_ports',
+          'severity': 'high',
+          'details': unexpected_ports
+        }]
+      }) }}
+  when: unexpected_ports | length > 0
+
+# ─────────────────────────────────────────────
+# Finalize Summary Counters
+# Computes drift_count, has_critical, and per-severity summary tallies
+# so Bob can triage without iterating the full drifts array.
+# ─────────────────────────────────────────────
+- name: Compute drift severity summary
+  ansible.builtin.set_fact:
+    _critical_count: "{{ drift_report.drifts | selectattr('severity', 'equalto', 'critical') | list | length }}"
+    _high_count:     "{{ drift_report.drifts | selectattr('severity', 'equalto', 'high')     | list | length }}"
+    _medium_count:   "{{ drift_report.drifts | selectattr('severity', 'equalto', 'medium')   | list | length }}"
+    _low_count:      "{{ drift_report.drifts | selectattr('severity', 'equalto', 'low')      | list | length }}"
+
+- name: Stamp summary counters and top-level flags into drift report
+  ansible.builtin.set_fact:
+    drift_report: >-
+      {{ drift_report | combine({
+        'drift_detected': drift_detected,
+        'drift_count': drift_report.drifts | length,
+        'has_critical': (_critical_count | int) > 0,
+        'summary': {
+          'critical': _critical_count | int,
+          'high':     _high_count     | int,
+          'medium':   _medium_count   | int,
+          'low':      _low_count      | int
+        }
+      }) }}
+
+# ─────────────────────────────────────────────
+# Generate Drift Report
+# ─────────────────────────────────────────────
+- name: Create drift reports directory
+  ansible.builtin.file:
+    path: /var/log/drift-reports
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Save drift report to file
+  ansible.builtin.copy:
+    content: "{{ drift_report | to_nice_json }}"
+    dest: "/var/log/drift-reports/drift-report-{{ ansible_date_time.epoch }}.json"
+    mode: '0644'
+  become: true
+
+- name: Display drift summary
+  ansible.builtin.debug:
+    msg: |
+      ═══════════════════════════════════════════════════════════
+      DRIFT DETECTION SUMMARY
+      ═══════════════════════════════════════════════════════════
+      Hostname:     {{ ansible_hostname }}
+      Instance ID:  {{ ansible_ec2_instance_id | default('unknown') }}
+      Timestamp:    {{ ansible_date_time.iso8601 }}
+
+      Drift Detected: {{ drift_detected }}
+      Total Drifts:   {{ drift_report.drift_count }}
+        Critical: {{ drift_report.summary.critical }}
+        High:     {{ drift_report.summary.high }}
+        Medium:   {{ drift_report.summary.medium }}
+        Low:      {{ drift_report.summary.low }}
+
+      {% if drift_report.drifts | length > 0 %}
+      Drift Details:
+      {% for drift in drift_report.drifts %}
+      - [{{ drift.severity | upper }}] {{ drift.type }}
+        {% if drift.service is defined %}Service:  {{ drift.service }}{% endif %}
+        {% if drift.file is defined %}File:     {{ drift.file }}{% endif %}
+        {% if drift.details is defined %}Details:  {{ drift.details }}{% endif %}
+      {% endfor %}
+      {% else %}
+      ✓ No drift detected - system matches baseline configuration
+      {% endif %}
+      ═══════════════════════════════════════════════════════════
+
+- name: Set drift exit code
+  ansible.builtin.set_fact:
+    drift_exit_code: "{{ '1' if drift_detected else '0' }}"
+
+- name: Fail if critical drift detected and fail_on_drift is true
+  ansible.builtin.fail:
+    msg: "Critical drift detected! Review /var/log/drift-reports/ for details."
+  when:
+    - drift_detected
+    - drift_report.has_critical
+    - fail_on_drift | default(false) | bool
+
+# Made with Bob

@@ -1,0 +1,45 @@
+# mock-tfplan-v2-pass.sentinel
+# Simulates a Terraform plan that PASSES enforce-s3-encryption:
+# S3 bucket exists AND a matching server-side encryption configuration exists.
+
+resource_changes = {
+  "aws_s3_bucket.artifacts": {
+    "address": "aws_s3_bucket.artifacts",
+    "type":    "aws_s3_bucket",
+    "mode":    "managed",
+    "change": {
+      "actions": ["create"],
+      "before":  null,
+      "after": {
+        "bucket": "golden-workflow-artifacts-dev",
+        "tags": {
+          "Name":        "golden-workflow-artifacts-dev",
+          "Pipeline":    "golden-workflow",
+          "Environment": "Development",
+        },
+      },
+    },
+  },
+  "aws_s3_bucket_server_side_encryption_configuration.artifacts": {
+    "address": "aws_s3_bucket_server_side_encryption_configuration.artifacts",
+    "type":    "aws_s3_bucket_server_side_encryption_configuration",
+    "mode":    "managed",
+    "change": {
+      "actions": ["create"],
+      "before":  null,
+      "after": {
+        "bucket": "golden-workflow-artifacts-dev",
+        "rule": [
+          {
+            "apply_server_side_encryption_by_default": [
+              {
+                "sse_algorithm":     "aws:kms",
+                "kms_master_key_id": "alias/aws/s3",
+              },
+            ],
+          },
+        ],
+      },
+    },
+  },
+}

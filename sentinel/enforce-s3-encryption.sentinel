@@ -1,0 +1,43 @@
+import "tfplan/v2" as tfplan
+
+# Get all S3 buckets
+s3_buckets = filter tfplan.resource_changes as _, rc {
+    rc.type is "aws_s3_bucket" and
+    rc.mode is "managed" and
+    (rc.change.actions contains "create" or rc.change.actions contains "update")
+}
+
+# Get all S3 bucket server-side encryption configurations
+s3_encryption = filter tfplan.resource_changes as _, rc {
+    rc.type is "aws_s3_bucket_server_side_encryption_configuration" and
+    rc.mode is "managed"
+}
+
+# Validation function
+validate_encryption = func(bucket) {
+    bucket_id = bucket.address
+
+    # Check if there's a corresponding encryption configuration
+    has_encryption = false
+    for s3_encryption as _, enc {
+        if enc.change.after.bucket is bucket.change.after.bucket or
+           enc.change.after.bucket is bucket.address {
+            has_encryption = true
+            break
+        }
+    }
+
+    if not has_encryption {
+        print("S3 bucket", bucket.address, "does not have encryption enabled")
+        return false
+    }
+
+    return true
+}
+
+# Main rule
+main = rule {
+    all s3_buckets as _, bucket {
+        validate_encryption(bucket)
+    }
+}
