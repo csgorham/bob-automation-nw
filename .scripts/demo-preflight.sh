@@ -210,10 +210,15 @@ banner "7 — Packer Template"
 
 if command -v packer &>/dev/null; then
   if [[ -f "$REPO_ROOT/packer/ami.pkr.hcl" ]]; then
-    if (cd "$REPO_ROOT/packer" && packer validate -var-file=variables.pkr.hcl ami.pkr.hcl &>/dev/null); then
+    # variables.pkr.hcl contains declarations (not values) so no -var-file needed.
+    # Pass placeholder values for required vars that have no defaults.
+    if (cd "$REPO_ROOT/packer" && packer validate \
+        -var="vpc_id=vpc-placeholder" \
+        -var="subnet_id=subnet-placeholder" \
+        ami.pkr.hcl &>/dev/null); then
       ok "Packer template valid"
     else
-      warn "Packer validate returned warnings — run manually to inspect"
+      warn "Packer validate returned errors — run 'cd packer && packer validate -var vpc_id=x -var subnet_id=x ami.pkr.hcl' to inspect"
     fi
   else
     fail "packer/ami.pkr.hcl not found"
