@@ -2518,11 +2518,12 @@ pipeline:
                           # Get GitHub repository from pipeline tags
                           GITHUB_REPO="<+pipeline.tags.github_repo>"
 
-                          # Clean up any existing clone
-                          rm -rf infra
+                          # Clean up any existing clone (repo name or explicit target dir)
+                          REPO_NAME=$(basename "$GITHUB_REPO" .git)
+                          rm -rf infra "$REPO_NAME"
 
-                          # Clone repo
-                          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git
+                          # Clone repo into a fixed directory name
+                          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git infra
                           cd infra
 
                           # Debug: Check NEW_WORKSPACE_ENV value
