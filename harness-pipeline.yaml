@@ -1930,7 +1930,7 @@ pipeline:
 
                           WORKSPACE_ID=$(curl -s \
                             -H "Authorization: Bearer $HCP_TOKEN" \
-                            "https://app.terraform.io/api/v2/organizations/dev_space/workspaces/${WORKSPACE_NAME}" \
+                            "https://app.terraform.io/api/v2/organizations/dev_space-cgh/workspaces/${WORKSPACE_NAME}" \
                             | jq -r '.data.id')
 
                           if [ -z "$WORKSPACE_ID" ] || [ "$WORKSPACE_ID" = "null" ]; then
@@ -1940,7 +1940,7 @@ pipeline:
                             WORKSPACE_NAME="ami-pipeline-ec2"
                             WORKSPACE_ID=$(curl -s \
                               -H "Authorization: Bearer $HCP_TOKEN" \
-                              "https://app.terraform.io/api/v2/organizations/dev_space/workspaces/${WORKSPACE_NAME}" \
+                              "https://app.terraform.io/api/v2/organizations/dev_space-cgh/workspaces/${WORKSPACE_NAME}" \
                               | jq -r '.data.id')
 
                             if [ -z "$WORKSPACE_ID" ] || [ "$WORKSPACE_ID" = "null" ]; then
