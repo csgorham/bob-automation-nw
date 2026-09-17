@@ -160,6 +160,8 @@ banner "4 — AWS Connectivity"
 
 if [[ -z "${AWS_ACCESS_KEY_ID:-}" ]]; then
   warn "AWS credentials not set — skipping AWS checks"
+elif ! command -v aws &>/dev/null; then
+  warn "aws CLI not installed — skipping credential validation (brew install awscli)"
 else
   if aws sts get-caller-identity &>/dev/null; then
     ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "unknown")
