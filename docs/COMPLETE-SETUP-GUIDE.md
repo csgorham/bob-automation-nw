@@ -57,6 +57,8 @@ HCP_ORGANIZATION_ID=your-hcp-org-id
 HCP_PROJECT_ID=your-hcp-project-id
 
 # GitHub
+# Create at: github.com → Settings → Developer settings → Personal access tokens → Tokens (classic)
+# Required scopes: repo (full), workflow
 GITHUB_TOKEN=your-github-token
 ```
 
@@ -107,12 +109,23 @@ vault kv put secret/ami-pipeline/hcp-terraform \
   token=$HCP_TERRAFORM_TOKEN
 ```
 
-### 3e. Verify
+### 3e. Store GitHub token
+
+```bash
+vault kv put secret/ami-pipeline/github \
+  token=$GITHUB_TOKEN
+```
+
+> The Harness pipeline reads this at runtime for repo clones and PR comments.
+> Required scopes: **repo** (full), **workflow**.
+
+### 3f. Verify
 
 ```bash
 vault kv get secret/ami-pipeline/hcp-packer
 vault kv get secret/ami-pipeline/s3
 vault kv get secret/ami-pipeline/hcp-terraform
+vault kv get secret/ami-pipeline/github
 ```
 
 ---
