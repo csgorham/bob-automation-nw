@@ -41,6 +41,7 @@ pipeline:
                           export VAULT_ADDR=$vault_addr
                           export VAULT_TOKEN=$vault_token
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
                           WORKSPACE_ID="ws-cXnGs9Q6vwxcNheL"
 
                           # Debug: Print trigger information
@@ -318,6 +319,7 @@ pipeline:
                           export VAULT_ADDR="$vault_addr"
                           export VAULT_TOKEN="$vault_token"
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           if command -v microdnf >/dev/null 2>&1; then
                             microdnf install -y jq unzip wget || true
@@ -424,6 +426,7 @@ pipeline:
                           export VAULT_ADDR="$vault_addr"
                           export VAULT_TOKEN="$vault_token"
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           if command -v microdnf >/dev/null 2>&1; then
                             microdnf install -y jq unzip wget || true
@@ -490,6 +493,7 @@ pipeline:
                           export VAULT_ADDR="$vault_addr"
                           export VAULT_TOKEN="$vault_token"
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           if command -v microdnf >/dev/null 2>&1; then
                             microdnf install -y jq unzip wget || true
@@ -616,6 +620,7 @@ pipeline:
                           export VAULT_ADDR="$vault_addr"
                           export VAULT_TOKEN="$vault_token"
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           if command -v microdnf >/dev/null 2>&1; then
                             microdnf install -y jq unzip wget || true
@@ -702,6 +707,7 @@ pipeline:
                           export VAULT_ADDR="$vault_addr"
                           export VAULT_TOKEN="$vault_token"
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           if command -v microdnf >/dev/null 2>&1; then
                             microdnf install -y jq unzip wget || true
@@ -883,6 +889,7 @@ pipeline:
                           export VAULT_ADDR="$vault_addr"
                           export VAULT_TOKEN="$vault_token"
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           if command -v microdnf >/dev/null 2>&1; then
                             microdnf install -y jq unzip wget || true
@@ -970,6 +977,7 @@ pipeline:
                           export VAULT_ADDR="$vault_addr"
                           export VAULT_TOKEN="$vault_token"
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           if command -v microdnf >/dev/null 2>&1; then
                             microdnf install -y jq unzip wget || true
@@ -1079,6 +1087,7 @@ pipeline:
                           export VAULT_ADDR="$vault_addr"
                           export VAULT_TOKEN="$vault_token"
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           if command -v microdnf >/dev/null 2>&1; then
                             microdnf install -y jq unzip wget || true
@@ -1214,6 +1223,7 @@ pipeline:
                           export VAULT_ADDR=$vault_addr
                           export VAULT_TOKEN=$vault_token
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           # Tools
                           if command -v apk >/dev/null 2>&1; then
@@ -1505,6 +1515,7 @@ pipeline:
                           export VAULT_ADDR=$vault_addr
                           export VAULT_TOKEN=$vault_token
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           # Install dependencies
                           if command -v microdnf >/dev/null 2>&1; then
@@ -1794,6 +1805,7 @@ pipeline:
                           export VAULT_ADDR=$vault_addr
                           export VAULT_TOKEN=$vault_token
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           # Install dependencies - handle curl conflict in RHEL-based systems
                           if command -v apk >/dev/null 2>&1; then
@@ -2019,6 +2031,7 @@ pipeline:
                           export VAULT_ADDR="$vault_addr"
                           export VAULT_TOKEN="$vault_token"
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           if command -v microdnf >/dev/null 2>&1; then
                             microdnf install -y jq unzip wget || true
@@ -2106,6 +2119,7 @@ pipeline:
                           export VAULT_ADDR=$vault_addr
                           export VAULT_TOKEN=$vault_token
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           if command -v microdnf >/dev/null 2>&1; then
                             microdnf install -y jq unzip wget || true
@@ -2263,6 +2277,7 @@ pipeline:
                           export VAULT_ADDR=$vault_addr
                           export VAULT_TOKEN=$vault_token
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
 
                           # Install dependencies based on package manager
@@ -2430,6 +2445,7 @@ pipeline:
                           export VAULT_ADDR=$vault_addr
                           export VAULT_TOKEN=$vault_token
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           echo "═══════════════════════════════════════════════════════════"
                           echo "POSTING DEPLOYMENT SUMMARY TO PR"
@@ -2633,6 +2649,7 @@ pipeline:
                           export VAULT_ADDR=$vault_addr
                           export VAULT_TOKEN=$vault_token
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           echo "═══════════════════════════════════════════════════════════"
                           echo "SIMULATING APACHE DRIFT"
@@ -2787,6 +2804,7 @@ pipeline:
                           export VAULT_ADDR=$vault_addr
                           export VAULT_TOKEN=$vault_token
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           echo "═══════════════════════════════════════════════════════════"
                           echo "EC2 DRIFT DETECTION"
@@ -3006,6 +3024,7 @@ pipeline:
                           export VAULT_ADDR=$vault_addr
                           export VAULT_TOKEN=$vault_token
                           export VAULT_SKIP_VERIFY="true"
+                          export VAULT_NAMESPACE="admin"
 
                           echo "═══════════════════════════════════════════════════════════"
                           echo "EC2 DRIFT REMEDIATION"
