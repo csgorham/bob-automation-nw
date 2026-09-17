@@ -2008,6 +2008,29 @@ pipeline:
                             echo "✓ ami_id variable updated: $AMI_ID"
                           fi
 
+                          # Clear any stale planned/pending runs before creating a new one
+                          # so the new run isn't stuck behind a queue of old runs
+                          echo "Checking for stale runs on EC2 workspace..."
+                          STALE_RUNS=$(curl -s \
+                            -H "Authorization: Bearer $HCP_TOKEN" \
+                            "https://app.terraform.io/api/v2/workspaces/$WORKSPACE_ID/runs?page%5Bsize%5D=10" \
+                            | jq -r '[.data[] | select(.attributes.status | test("^(pending|planning|planned|cost_estimating|cost_estimated|policy_checking|policy_checked|policy_override)$")) | .id] | .[]')
+
+                          for STALE_ID in $STALE_RUNS; do
+                            echo "  Discarding stale run $STALE_ID..."
+                            curl -s -X POST \
+                              -H "Authorization: Bearer $HCP_TOKEN" \
+                              -H "Content-Type: application/vnd.api+json" \
+                              "https://app.terraform.io/api/v2/runs/$STALE_ID/actions/discard" \
+                              -d '{"comment":"Discarded by pipeline to unblock workspace for fresh plan"}' >/dev/null
+                          done
+
+                          # Wait briefly for workspace to unlock after discards
+                          if [ -n "$STALE_RUNS" ]; then
+                            echo "  Waiting 15s for workspace to unlock..."
+                            sleep 15
+                          fi
+
                           # Trigger plan only (auto-apply: false)
                           echo "Creating Terraform plan for EC2 instance..."
                           RUN=$(curl -s \
@@ -2048,11 +2071,9 @@ pipeline:
                             if [[ "$STATUS" == "policy_checked" ]] || [[ "$STATUS" == "policy_override" ]] || [[ "$STATUS" == "planned_and_finished" ]] || [[ "$STATUS" == "planned" ]] || [[ "$STATUS" == "cost_estimated" ]]; then
                               echo "✓ EC2 plan completed: $STATUS"
                               break
-                            elif [[ "$STATUS" == "pending" ]] && [[ $i -ge 20 ]]; then
-                              echo "⚠ Run stuck in pending state after ${i} attempts"
-                              echo "  This may indicate workspace is locked or queued"
-                              echo "  Proceeding anyway - check HCP Terraform console"
-                              break
+                            elif [[ "$STATUS" == "pending" ]] && [[ $i -ge 30 ]]; then
+                              echo "✗ Run stuck in pending state after ${i} attempts - workspace may be locked"
+                              exit 1
                             elif [[ "$STATUS" == "errored" ]] || [[ "$STATUS" == "cancelled" ]] || [[ "$STATUS" == "discarded" ]]; then
                               echo "✗ EC2 plan failed: $STATUS"
                               exit 1
