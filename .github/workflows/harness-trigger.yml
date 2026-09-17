@@ -1,24 +1,72 @@
-name: Notify Harness on PR Merge
+name: Trigger Harness Pipeline
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
-    types: [closed]
+    types: [opened, synchronize, reopened]
     branches:
       - main
 
 jobs:
   trigger-harness:
-    if: github.event.pull_request.merged == true
+    name: Trigger Harness ami-build-pipeline
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
       - name: Trigger Harness Pipeline
+        env:
+          HARNESS_API_KEY: ${{ secrets.HARNESS_API_KEY }}
+          HARNESS_ACCOUNT_ID: ${{ secrets.HARNESS_ACCOUNT_ID }}
+          HARNESS_ORG_ID: ${{ secrets.HARNESS_ORG_ID }}
+          HARNESS_PROJECT_ID: ${{ secrets.HARNESS_PROJECT_ID }}
         run: |
-          curl -X POST \
-            -H "x-api-key: ${{ secrets.HARNESS_API_KEY }}" \
+          # Determine PR number (empty string if push to main, not a PR)
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_HEAD_REF="${{ github.event.pull_request.head.ref }}"
+          PR_BASE_REF="${{ github.event.pull_request.base.ref }}"
+
+          # For push events, use the commit SHA as a reference
+          if [ -z "$PR_NUMBER" ]; then
+            PR_NUMBER=""
+            PR_HEAD_REF="${{ github.ref_name }}"
+            PR_BASE_REF="main"
+          fi
+
+          echo "Triggering Harness pipeline: ami_build_pipeline"
+          echo "PR Number: $PR_NUMBER"
+          echo "Source Branch: $PR_HEAD_REF"
+          echo "Target Branch: $PR_BASE_REF"
+
+          RESPONSE=$(curl -s -o /tmp/harness_response.json -w "%{http_code}" \
+            -X POST \
+            "https://app.harness.io/pipeline/api/pipeline/execute/${HARNESS_PROJECT_ID}/ami_build_pipeline?accountIdentifier=${HARNESS_ACCOUNT_ID}&orgIdentifier=${HARNESS_ORG_ID}&projectIdentifier=${HARNESS_PROJECT_ID}&moduleType=cd" \
+            -H "x-api-key: ${HARNESS_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d '{"branch":"main","repoIdentifier":"ami-pipeline"}' \
-            "https://app.harness.io/gateway/pipeline/api/webhook/triggerPipeline?accountIdentifier=${{ secrets.HARNESS_ACCOUNT_ID }}&orgIdentifier=default&projectIdentifier=${{ secrets.HARNESS_PROJECT_ID }}&targetBranchName=main"
+            -d "{
+              \"inputSetTemplateYaml\": \"\",
+              \"triggerPayload\": {
+                \"prNumber\": \"${PR_NUMBER}\",
+                \"sourceBranch\": \"${PR_HEAD_REF}\",
+                \"targetBranch\": \"${PR_BASE_REF}\",
+                \"commitSha\": \"${{ github.sha }}\",
+                \"repoName\": \"${{ github.repository }}\"
+              }
+            }")
+
+          echo "HTTP Status: $RESPONSE"
+          cat /tmp/harness_response.json
+
+          if [ "$RESPONSE" -ne 200 ]; then
+            echo "❌ Failed to trigger Harness pipeline (HTTP $RESPONSE)"
+            exit 1
+          fi
+
+          echo "✅ Harness pipeline triggered successfully"
+
+          # Extract and print the execution URL from the response
+          EXECUTION_ID=$(cat /tmp/harness_response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('planExecution',{}).get('uuid','unknown'))" 2>/dev/null || echo "unknown")
+          if [ "$EXECUTION_ID" != "unknown" ] && [ -n "$EXECUTION_ID" ]; then
+            echo "🔗 Pipeline execution: https://app.harness.io/ng/account/${HARNESS_ACCOUNT_ID}/module/cd/orgs/${HARNESS_ORG_ID}/projects/${HARNESS_PROJECT_ID}/pipelines/ami_build_pipeline/executions/${EXECUTION_ID}/pipeline"
+          fi
