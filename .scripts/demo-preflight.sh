@@ -57,24 +57,28 @@ banner "1 — Required CLI Tools"
 
 check_tool() {
   local tool="$1"
-  local min_version="${2:-}"
+  local version_cmd="${2:-}"
   if command -v "$tool" &>/dev/null; then
-    local version
-    version=$("$tool" version 2>/dev/null | head -1 || "$tool" --version 2>/dev/null | head -1 || echo "unknown")
+    local version="unknown"
+    if [[ -n "$version_cmd" ]]; then
+      version=$(eval "$version_cmd" 2>/dev/null | head -1 || echo "unknown")
+    else
+      version=$("$tool" --version 2>/dev/null | head -1 || echo "unknown")
+    fi
     ok "$tool found — $version"
   else
     fail "$tool not found — install it before running the demo"
   fi
 }
 
-check_tool terraform
-check_tool sentinel
-check_tool packer
-check_tool ansible
-check_tool vault
-check_tool aws
-check_tool git
-check_tool jq
+check_tool terraform  "terraform version"
+check_tool sentinel   "sentinel version"
+check_tool packer     "packer version"
+check_tool ansible    "ansible --version"
+check_tool vault      "vault version"
+check_tool aws        "aws --version"
+check_tool git        "git --version"
+check_tool jq         "jq --version"
 
 # =============================================================================
 banner "2 — Environment Variables"
