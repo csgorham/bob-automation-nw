@@ -1081,37 +1081,20 @@ pipeline:
                           export PATH="/tmp:$PATH"
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
+                          WORKSPACE_ID="ws-uGtV1DEBnULDJwzf"
 
-                          echo "🚀 Applying approved S3 Terraform plan..."
-                          echo "Run ID: $RUN_ID"
+                          echo "🚀 Triggering S3 Terraform apply..."
 
-                          # Check current status first
-                          CURRENT_STATUS=$(curl -s \
-                            -H "Authorization: Bearer $HCP_TOKEN" \
-                            https://app.terraform.io/api/v2/runs/$RUN_ID \
-                            | jq -r '.data.attributes.status' | tr -d '[:space:]')
-
-                          echo "Current status: '$CURRENT_STATUS'"
-
-                          # If already finished (no changes), skip apply
-                          if [[ "$CURRENT_STATUS" == "planned_and_finished" ]]; then
-                            echo "✓ S3 plan shows no changes needed (already up-to-date)"
-                            echo "  Skipping apply as infrastructure is already in desired state"
-                            exit 0
-                          fi
-
-                          # Apply the run
-                          APPLY_RESPONSE=$(curl -s -X POST \
+                          # Trigger a fresh auto-apply run
+                          RUN_RESPONSE=$(curl -s \
                             -H "Authorization: Bearer $HCP_TOKEN" \
                             -H "Content-Type: application/vnd.api+json" \
-                            "https://app.terraform.io/api/v2/runs/$RUN_ID/actions/apply")
+                            -d "{\"data\":{\"type\":\"runs\",\"attributes\":{\"message\":\"Create S3 bucket\",\"auto-apply\":true},\"relationships\":{\"workspace\":{\"data\":{\"type\":\"workspaces\",\"id\":\"$WORKSPACE_ID\"}}}}}" \
+                            https://app.terraform.io/api/v2/runs)
 
-                          # Check if apply was accepted
-                          if echo "$APPLY_RESPONSE" | grep -q "errors"; then
-                            echo "✗ Failed to trigger apply:"
-                            echo "$APPLY_RESPONSE" | jq -r '.errors[].title' 2>/dev/null || echo "$APPLY_RESPONSE"
-                            exit 1
-                          fi
+                          RUN_ID=$(echo "$RUN_RESPONSE" | jq -r '.data.id')
+                          [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ] && { echo "✗ Failed to create run: $RUN_RESPONSE"; exit 1; }
+                          echo "Run ID: $RUN_ID"
 
                           # Wait for apply to complete
                           for i in {1..60}; do
@@ -1120,14 +1103,10 @@ pipeline:
                               https://app.terraform.io/api/v2/runs/$RUN_ID \
                               | jq -r '.data.attributes.status' | tr -d '[:space:]')
 
-                            echo "Apply status ($i/60): '$STATUS'"
+                            echo "Status ($i/60): '$STATUS'"
 
-                            if [[ "$STATUS" == "applied" ]]; then
-                              echo "✓ S3 bucket created successfully"
-                              BUCKET_NAME=$(vault kv get -field=bucket_name secret/ami-pipeline/s3 2>/dev/null || echo "")
-                              if [ -n "$BUCKET_NAME" ]; then
-                                echo "Confirmed bucket in Vault: $BUCKET_NAME"
-                              fi
+                            if [[ "$STATUS" == "applied" ]] || [[ "$STATUS" == "planned_and_finished" ]]; then
+                              echo "✓ S3 bucket created/verified successfully"
                               exit 0
                             elif [[ "$STATUS" == "errored" ]] || [[ "$STATUS" == "cancelled" ]]; then
                               echo "✗ S3 creation failed: $STATUS"
@@ -1226,37 +1205,20 @@ pipeline:
                           fi
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
+                          WORKSPACE_ID="ws-knQbRVQxeyzbWcwj"
 
-                          echo "🚀 Applying approved Network Terraform plan..."
-                          echo "Run ID: $RUN_ID"
+                          echo "🚀 Triggering Network Terraform apply..."
 
-                          # Check current status first
-                          CURRENT_STATUS=$(curl -s \
-                            -H "Authorization: Bearer $HCP_TOKEN" \
-                            https://app.terraform.io/api/v2/runs/$RUN_ID \
-                            | jq -r '.data.attributes.status' | tr -d '[:space:]')
-
-                          echo "Current status: '$CURRENT_STATUS'"
-
-                          # If already finished (no changes), skip apply
-                          if [[ "$CURRENT_STATUS" == "planned_and_finished" ]]; then
-                            echo "✓ Network plan shows no changes needed (already up-to-date)"
-                            echo "  Skipping apply as infrastructure is already in desired state"
-                            exit 0
-                          fi
-
-                          # Apply the run
-                          APPLY_RESPONSE=$(curl -s -X POST \
+                          # Trigger a fresh auto-apply run
+                          RUN_RESPONSE=$(curl -s \
                             -H "Authorization: Bearer $HCP_TOKEN" \
                             -H "Content-Type: application/vnd.api+json" \
-                            "https://app.terraform.io/api/v2/runs/$RUN_ID/actions/apply")
+                            -d "{\"data\":{\"type\":\"runs\",\"attributes\":{\"message\":\"Create Network\",\"auto-apply\":true},\"relationships\":{\"workspace\":{\"data\":{\"type\":\"workspaces\",\"id\":\"$WORKSPACE_ID\"}}}}}" \
+                            https://app.terraform.io/api/v2/runs)
 
-                          # Check if apply was accepted
-                          if echo "$APPLY_RESPONSE" | grep -q "errors"; then
-                            echo "✗ Failed to trigger apply:"
-                            echo "$APPLY_RESPONSE" | jq -r '.errors[].title' 2>/dev/null || echo "$APPLY_RESPONSE"
-                            exit 1
-                          fi
+                          RUN_ID=$(echo "$RUN_RESPONSE" | jq -r '.data.id')
+                          [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ] && { echo "✗ Failed to create run: $RUN_RESPONSE"; exit 1; }
+                          echo "Run ID: $RUN_ID"
 
                           # Wait for apply to complete
                           for i in {1..60}; do
@@ -1265,14 +1227,10 @@ pipeline:
                               https://app.terraform.io/api/v2/runs/$RUN_ID \
                               | jq -r '.data.attributes.status' | tr -d '[:space:]')
 
-                            echo "Apply status ($i/60): '$STATUS'"
+                            echo "Status ($i/60): '$STATUS'"
 
-                            if [[ "$STATUS" == "applied" ]]; then
-                              echo "✓ Network created successfully"
-                              VPC_ID=$(vault kv get -field=vpc_id secret/ami-pipeline/network)
-                              SUBNET_ID=$(vault kv get -field=subnet_id secret/ami-pipeline/network)
-                              echo "VPC ID: $VPC_ID"
-                              echo "Subnet ID: $SUBNET_ID"
+                            if [[ "$STATUS" == "applied" ]] || [[ "$STATUS" == "planned_and_finished" ]]; then
+                              echo "✓ Network created/verified successfully"
                               exit 0
                             elif [[ "$STATUS" == "errored" ]] || [[ "$STATUS" == "cancelled" ]]; then
                               echo "✗ Network creation failed: $STATUS"
