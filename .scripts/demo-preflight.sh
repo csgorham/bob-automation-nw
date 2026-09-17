@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck shell=bash
 # =============================================================================
 # GOLDEN WORKFLOW — Demo Preflight Check
 # =============================================================================
@@ -26,8 +27,8 @@ NC='\033[0m'
 PASS=0
 FAIL=0
 
-ok()   { echo -e "  ${GREEN}✓${NC}  $*"; ((PASS++)); }
-fail() { echo -e "  ${RED}✗${NC}  $*"; ((FAIL++)); }
+ok()   { echo -e "  ${GREEN}✓${NC}  $*"; PASS=$((PASS + 1)); }
+fail() { echo -e "  ${RED}✗${NC}  $*"; FAIL=$((FAIL + 1)); }
 warn() { echo -e "  ${YELLOW}⚠${NC}  $*"; }
 info() { echo -e "  ${CYAN}ℹ${NC}  $*"; }
 
