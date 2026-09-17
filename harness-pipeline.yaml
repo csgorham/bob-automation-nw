@@ -1419,7 +1419,7 @@ pipeline:
                             echo "✓ Cleanup complete"
 
                             echo "→ Cloning repository..."
-                            git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git
+                            git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git infra
                             echo "✓ Repository cloned"
 
                             echo "→ Changing to packer directory..."
@@ -1449,7 +1449,7 @@ pipeline:
                             echo "✓ Packer build complete"
 
                             echo "→ Extracting AMI ID from manifest..."
-                            AMI_ID=$(python3 -c "import json; data = json.load(open('manifest.json')); artifact = data['builds'][-1]['artifact_id']; print(artifact.split(':')[-1])")
+                            AMI_ID=$(jq -r '.builds[-1].artifact_id' manifest.json | cut -d: -f2)
                             echo "✓ AMI ID extracted: $AMI_ID"
 
                             # Extract version fingerprint from Packer output for channel assignment
