@@ -136,81 +136,19 @@ pipeline:
                             fi
                           fi
 
-                          # Install Vault with multiple extraction methods
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
                             echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-
-                            # Download vault.zip
-                            echo "Downloading Vault..."
-                            if command -v curl >/dev/null 2>&1; then
-                              curl -sL https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -o /tmp/vault.zip
-                            elif command -v wget >/dev/null 2>&1; then
-                              wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            else
-                              echo "✗ Neither wget nor curl available"
-                              exit 1
-                            fi
-
-                            echo "Download complete. Extracting..."
-
-                            # Try multiple extraction methods
-                            EXTRACTED=false
-
-                            # Method 1: unzip
-                            if command -v unzip >/dev/null 2>&1; then
-                              echo "Trying unzip..."
-                              if unzip -oq /tmp/vault.zip -d /tmp 2>/dev/null || unzip -o /tmp/vault.zip -d /tmp 2>/dev/null; then
-                                EXTRACTED=true
-                                echo "✓ Extracted with unzip"
-                              fi
-                            fi
-
-                            # Method 2: python3
-                            if [ "$EXTRACTED" = false ] && command -v python3 >/dev/null 2>&1; then
-                              echo "Trying python3..."
-                              if python3 -c "import zipfile; zipfile.ZipFile('/tmp/vault.zip').extractall('/tmp')" 2>/dev/null; then
-                                EXTRACTED=true
-                                echo "✓ Extracted with python3"
-                              fi
-                            fi
-
-                            # Method 3: python
-                            if [ "$EXTRACTED" = false ] && command -v python >/dev/null 2>&1; then
-                              echo "Trying python..."
-                              if python -c "import zipfile; zipfile.ZipFile('/tmp/vault.zip').extractall('/tmp')" 2>/dev/null; then
-                                EXTRACTED=true
-                                echo "✓ Extracted with python"
-                              fi
-                            fi
-
-                            # Method 4: busybox unzip (common in minimal containers)
-                            if [ "$EXTRACTED" = false ] && command -v busybox >/dev/null 2>&1; then
-                              echo "Trying busybox unzip..."
-                              if busybox unzip -o /tmp/vault.zip -d /tmp 2>/dev/null; then
-                                EXTRACTED=true
-                                echo "✓ Extracted with busybox"
-                              fi
-                            fi
-
-                            if [ "$EXTRACTED" = false ]; then
-                              echo "✗ Cannot extract vault.zip - no extraction tool available"
-                              echo "Tried: unzip, python3, python, busybox"
-                              echo "Available commands:"
-                              for cmd in unzip python python3 busybox; do
-                                if command -v $cmd >/dev/null 2>&1; then
-                                  echo "  ✓ $cmd"
-                                else
-                                  echo "  ✗ $cmd"
-                                fi
-                              done
-                              exit 1
-                            fi
-
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
-                            echo "✓ Vault installed successfully"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+
                           echo "✓ Dependencies installed"
                           echo "Fetching HCP Terraform token from Vault..."
 
@@ -385,12 +323,17 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
@@ -486,12 +429,17 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
@@ -547,12 +495,17 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           # Check if network already exists with all required fields
@@ -668,12 +621,17 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           # Skip if RUN_ID is "SKIP"
@@ -750,10 +708,15 @@ pipeline:
                           fi
 
                           if ! command -v vault >/dev/null 2>&1; then
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
+                            rm -f /tmp/vault /tmp/vault.zip
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
@@ -926,10 +889,15 @@ pipeline:
                           fi
 
                           if ! command -v vault >/dev/null 2>&1; then
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
+                            rm -f /tmp/vault /tmp/vault.zip
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
@@ -1007,12 +975,17 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
@@ -1111,12 +1084,17 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           # Check if network already exists with all required fields
@@ -1263,21 +1241,28 @@ pipeline:
 
                           # Vault CLI
                           command -v vault >/dev/null || {
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           }
 
-                          # Packer
-                          PACKER_VERSION="1.15.1"
-                          rm -f /tmp/packer
-                          hash -r
-                          wget -q https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_amd64.zip -O /tmp/packer.zip
-                          unzip -oq /tmp/packer.zip -d /tmp
-                          chmod +x /tmp/packer
-                          export PATH="/tmp:$PATH"
+                          # Packer (arch-aware, no unzip required)
+                          if ! command -v packer >/dev/null 2>&1; then
+                            PACKER_VERSION="1.11.2"
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
+                            rm -f /tmp/packer /tmp/packer.zip
+                            curl -sL "https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_${ARCH}.zip" -o /tmp/packer.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/packer.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/packer.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/packer 2>/dev/null || true
+                            chmod +x /tmp/packer
+                            export PATH="/tmp:$PATH"
+                          fi
                           packer --version
 
                           # Credentials - Dynamic from Vault AWS Secrets Engine
@@ -1531,12 +1516,17 @@ pipeline:
                           fi
 
                           # Install Vault
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           echo "✓ Dependencies installed"
@@ -1830,16 +1820,15 @@ pipeline:
 
                           # Install Vault CLI
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            # Use curl if wget is not available
-                            if command -v wget >/dev/null 2>&1; then
-                              wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            else
-                              curl -sL https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -o /tmp/vault.zip
-                            fi
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
@@ -2035,12 +2024,17 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
@@ -2117,12 +2111,17 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
@@ -2317,12 +2316,17 @@ pipeline:
                           ansible --version | head -1
 
                           # Install Vault CLI
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           # Read GitHub token from Vault
@@ -2452,12 +2456,17 @@ pipeline:
                           fi
 
                           # Install Vault CLI
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           # Get GitHub token from Vault
@@ -2666,12 +2675,17 @@ pipeline:
                           fi
 
                           # Install Vault CLI
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           # Read GitHub token from Vault
@@ -2824,12 +2838,17 @@ pipeline:
                           ansible --version | head -1
 
                           # Install Vault CLI
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           # Read GitHub token from Vault
@@ -3033,12 +3052,17 @@ pipeline:
                           fi
 
                           # Install Vault CLI
+                          # Install Vault (arch-aware, no unzip/python required)
                           if ! command -v vault >/dev/null 2>&1; then
+                            echo "Installing Vault..."
+                            ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
-                            wget -q https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_amd64.zip -O /tmp/vault.zip
-                            unzip -oq /tmp/vault.zip -d /tmp
+                            curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
+                            HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
                             export PATH="/tmp:$PATH"
+                            echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
 
                           # Read GitHub token from Vault
