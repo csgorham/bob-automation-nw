@@ -2464,19 +2464,17 @@ pipeline:
                               fi
                               curl -sL "$PY_URL" -o /tmp/cpython.tar.gz
                               tar -xzf /tmp/cpython.tar.gz -C /tmp
-                              mv /tmp/python /usr/local/python
-                              ln -sf /usr/local/python/bin/python3 /usr/bin/python3
-                              ln -sf /usr/local/python/bin/pip3 /usr/bin/pip3
+                              # /usr/local is read-only on this delegate — keep Python in /tmp
                               rm -f /tmp/cpython.tar.gz
                               echo "✓ Python standalone build installed ($PYARCH)"
                             fi
 
-                            # Install ansible using pip
-                            python3 -m pip install --user ansible
+                            # Install ansible using pip (python lives in /tmp/python/bin)
+                            /tmp/python/bin/python3 -m pip install --user ansible
                           fi
 
-                          # Add Python user bin to PATH (where pip installs executables)
-                          export PATH="$HOME/.local/bin:/opt/harness-delegate/.local/bin:/usr/local/bin:$PATH"
+                          # Add Python and pip-installed bins to PATH
+                          export PATH="/tmp/python/bin:$HOME/.local/bin:/opt/harness-delegate/.local/bin:/usr/local/bin:$PATH"
 
                           # Verify ansible is available
                           if ! command -v ansible >/dev/null 2>&1; then
@@ -2857,17 +2855,15 @@ pipeline:
                               fi
                               curl -sL "$PY_URL" -o /tmp/cpython.tar.gz
                               tar -xzf /tmp/cpython.tar.gz -C /tmp
-                              mv /tmp/python /usr/local/python
-                              ln -sf /usr/local/python/bin/python3 /usr/bin/python3
-                              ln -sf /usr/local/python/bin/pip3 /usr/bin/pip3
+                              # /usr/local is read-only on this delegate — keep Python in /tmp
                               rm -f /tmp/cpython.tar.gz
                               echo "✓ Python standalone build installed ($PYARCH)"
                             fi
 
-                            python3 -m pip install --user ansible
+                            /tmp/python/bin/python3 -m pip install --user ansible
                           fi
 
-                          export PATH="$HOME/.local/bin:/opt/harness-delegate/.local/bin:/usr/local/bin:$PATH"
+                          export PATH="/tmp/python/bin:$HOME/.local/bin:/opt/harness-delegate/.local/bin:/usr/local/bin:$PATH"
 
                           if ! command -v ansible >/dev/null 2>&1; then
                             echo "ERROR: Ansible not found"
@@ -3027,19 +3023,17 @@ pipeline:
                               fi
                               curl -sL "$PY_URL" -o /tmp/cpython.tar.gz
                               tar -xzf /tmp/cpython.tar.gz -C /tmp
-                              mv /tmp/python /usr/local/python
-                              ln -sf /usr/local/python/bin/python3 /usr/bin/python3
-                              ln -sf /usr/local/python/bin/pip3 /usr/bin/pip3
+                              # /usr/local is read-only on this delegate — keep Python in /tmp
                               rm -f /tmp/cpython.tar.gz
                               echo "✓ Python standalone build installed ($PYARCH)"
                             fi
 
                             # Install ansible using pip
-                            python3 -m pip install --user ansible
+                            /tmp/python/bin/python3 -m pip install --user ansible
                           fi
 
-                          # Add Python user bin to PATH
-                          export PATH="$HOME/.local/bin:/opt/harness-delegate/.local/bin:/usr/local/bin:$PATH"
+                          # Add Python and pip-installed bins to PATH
+                          export PATH="/tmp/python/bin:$HOME/.local/bin:/opt/harness-delegate/.local/bin:/usr/local/bin:$PATH"
 
                           # Verify ansible is available
                           if ! command -v ansible >/dev/null 2>&1; then
@@ -3259,18 +3253,16 @@ pipeline:
                               fi
                               curl -sL "$PY_URL" -o /tmp/cpython.tar.gz
                               tar -xzf /tmp/cpython.tar.gz -C /tmp
-                              mv /tmp/python /usr/local/python
-                              ln -sf /usr/local/python/bin/python3 /usr/bin/python3
-                              ln -sf /usr/local/python/bin/pip3 /usr/bin/pip3
+                              # /usr/local is read-only on this delegate — keep Python in /tmp
                               rm -f /tmp/cpython.tar.gz
                               echo "✓ Python standalone build installed ($PYARCH)"
                             fi
 
                             # Install ansible using pip
-                            python3 -m pip install --user ansible
+                            /tmp/python/bin/python3 -m pip install --user ansible
                           fi
 
-                          export PATH="$HOME/.local/bin:/opt/harness-delegate/.local/bin:/usr/local/bin:$PATH"
+                          export PATH="/tmp/python/bin:$HOME/.local/bin:/opt/harness-delegate/.local/bin:/usr/local/bin:$PATH"
 
                           if ! command -v ansible >/dev/null 2>&1; then
                             echo "ERROR: Ansible not found"
