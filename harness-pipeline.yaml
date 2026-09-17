@@ -2447,22 +2447,28 @@ pipeline:
                             yum install -y unzip git wget python3-pip
                             pip3 install ansible
                           elif command -v microdnf >/dev/null 2>&1; then
-                            # For microdnf (UBI containers), use Python standalone builds
+                            # For microdnf (UBI/RHEL containers) — no wget, use curl; detect arch
                             echo "Installing Python standalone build for UBI container..."
-                            microdnf install -y wget tar gzip unzip git || true
+                            microdnf install -y tar gzip unzip git || true
 
                             # Check if python3 is available
                             if ! command -v python3 >/dev/null 2>&1; then
                               echo "Downloading Python standalone build..."
                               cd /tmp
-                              # Use Python standalone builds from indygreg (much faster than compiling)
-                              wget -q https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
-                              tar -xzf cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
-                              mv python /usr/local/python
+                              PYARCH=$(uname -m)
+                              # indygreg standalone builds — pick the right arch tarball
+                              if [ "$PYARCH" = "aarch64" ]; then
+                                PY_URL="https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-aarch64-unknown-linux-gnu-install_only.tar.gz"
+                              else
+                                PY_URL="https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz"
+                              fi
+                              curl -sL "$PY_URL" -o /tmp/cpython.tar.gz
+                              tar -xzf /tmp/cpython.tar.gz -C /tmp
+                              mv /tmp/python /usr/local/python
                               ln -sf /usr/local/python/bin/python3 /usr/bin/python3
                               ln -sf /usr/local/python/bin/pip3 /usr/bin/pip3
-                              rm -f cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
-                              echo "✓ Python standalone build installed"
+                              rm -f /tmp/cpython.tar.gz
+                              echo "✓ Python standalone build installed ($PYARCH)"
                             fi
 
                             # Install ansible using pip
@@ -2839,18 +2845,23 @@ pipeline:
                             pip3 install ansible
                           elif command -v microdnf >/dev/null 2>&1; then
                             echo "Installing Python standalone build for UBI container..."
-                            microdnf install -y wget tar gzip unzip git || true
+                            microdnf install -y tar gzip unzip git || true
 
                             if ! command -v python3 >/dev/null 2>&1; then
                               echo "Downloading Python standalone build..."
-                              cd /tmp
-                              wget -q https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
-                              tar -xzf cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
-                              mv python /usr/local/python
+                              PYARCH=$(uname -m)
+                              if [ "$PYARCH" = "aarch64" ]; then
+                                PY_URL="https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-aarch64-unknown-linux-gnu-install_only.tar.gz"
+                              else
+                                PY_URL="https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz"
+                              fi
+                              curl -sL "$PY_URL" -o /tmp/cpython.tar.gz
+                              tar -xzf /tmp/cpython.tar.gz -C /tmp
+                              mv /tmp/python /usr/local/python
                               ln -sf /usr/local/python/bin/python3 /usr/bin/python3
                               ln -sf /usr/local/python/bin/pip3 /usr/bin/pip3
-                              rm -f cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
-                              echo "✓ Python standalone build installed"
+                              rm -f /tmp/cpython.tar.gz
+                              echo "✓ Python standalone build installed ($PYARCH)"
                             fi
 
                             python3 -m pip install --user ansible
@@ -3001,22 +3012,26 @@ pipeline:
                             yum install -y unzip git wget python3-pip
                             pip3 install ansible
                           elif command -v microdnf >/dev/null 2>&1; then
-                            # For microdnf (UBI containers), use Python standalone builds
+                            # For microdnf (UBI/RHEL containers) — no wget, use curl; detect arch
                             echo "Installing Python standalone build for UBI container..."
-                            microdnf install -y wget tar gzip unzip git || true
+                            microdnf install -y tar gzip unzip git || true
 
                             # Check if python3 is available
                             if ! command -v python3 >/dev/null 2>&1; then
                               echo "Downloading Python standalone build..."
-                              cd /tmp
-                              # Use Python standalone builds from indygreg (much faster than compiling)
-                              wget -q https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
-                              tar -xzf cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
-                              mv python /usr/local/python
+                              PYARCH=$(uname -m)
+                              if [ "$PYARCH" = "aarch64" ]; then
+                                PY_URL="https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-aarch64-unknown-linux-gnu-install_only.tar.gz"
+                              else
+                                PY_URL="https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz"
+                              fi
+                              curl -sL "$PY_URL" -o /tmp/cpython.tar.gz
+                              tar -xzf /tmp/cpython.tar.gz -C /tmp
+                              mv /tmp/python /usr/local/python
                               ln -sf /usr/local/python/bin/python3 /usr/bin/python3
                               ln -sf /usr/local/python/bin/pip3 /usr/bin/pip3
-                              rm -f cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
-                              echo "✓ Python standalone build installed"
+                              rm -f /tmp/cpython.tar.gz
+                              echo "✓ Python standalone build installed ($PYARCH)"
                             fi
 
                             # Install ansible using pip
@@ -3229,22 +3244,26 @@ pipeline:
                             yum install -y unzip git wget python3-pip
                             pip3 install ansible
                           elif command -v microdnf >/dev/null 2>&1; then
-                            # For microdnf (UBI containers), use Python standalone builds
+                            # For microdnf (UBI/RHEL containers) — no wget, use curl; detect arch
                             echo "Installing Python standalone build for UBI container..."
-                            microdnf install -y wget tar gzip unzip git || true
+                            microdnf install -y tar gzip unzip git || true
 
                             # Check if python3 is available
                             if ! command -v python3 >/dev/null 2>&1; then
                               echo "Downloading Python standalone build..."
-                              cd /tmp
-                              # Use Python standalone builds from indygreg (much faster than compiling)
-                              wget -q https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
-                              tar -xzf cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
-                              mv python /usr/local/python
+                              PYARCH=$(uname -m)
+                              if [ "$PYARCH" = "aarch64" ]; then
+                                PY_URL="https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-aarch64-unknown-linux-gnu-install_only.tar.gz"
+                              else
+                                PY_URL="https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz"
+                              fi
+                              curl -sL "$PY_URL" -o /tmp/cpython.tar.gz
+                              tar -xzf /tmp/cpython.tar.gz -C /tmp
+                              mv /tmp/python /usr/local/python
                               ln -sf /usr/local/python/bin/python3 /usr/bin/python3
                               ln -sf /usr/local/python/bin/pip3 /usr/bin/pip3
-                              rm -f cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz
-                              echo "✓ Python standalone build installed"
+                              rm -f /tmp/cpython.tar.gz
+                              echo "✓ Python standalone build installed ($PYARCH)"
                             fi
 
                             # Install ansible using pip
