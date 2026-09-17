@@ -137,8 +137,8 @@ pipeline:
                             fi
                           fi
 
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -146,6 +146,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -154,14 +159,8 @@ pipeline:
                           echo "Fetching HCP Terraform token from Vault..."
 
                           # Use static token (dynamic tokens lack workspace access)
-                          echo "DEBUG: VAULT_ADDR=$VAULT_ADDR VAULT_NAMESPACE=$VAULT_NAMESPACE"
-                          echo "DEBUG: vault binary: $(command -v vault || echo 'NOT FOUND')"
-                          echo "DEBUG: vault version: $(vault version 2>&1 || echo 'FAILED')"
-                          vault kv get secret/ami-pipeline/hcp-terraform 2>&1 || true
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform 2>&1)
-                          echo "DEBUG: HCP_TOKEN length: ${#HCP_TOKEN}"
-                          echo "DEBUG: HCP_TOKEN first 20: ${HCP_TOKEN:0:20}"
-                          [ -z "$HCP_TOKEN" ] || [[ "$HCP_TOKEN" == *"Error"* ]] && { echo "✗ Failed to get token from Vault"; exit 1; }
+                          [ -z "$HCP_TOKEN" ] || [[ "$HCP_TOKEN" == *"Error"* ]] && { echo "✗ Failed to get token from Vault: $HCP_TOKEN"; exit 1; }
                           echo "✓ Terraform Cloud token obtained"
 
                           # -----------------------------
@@ -331,8 +330,8 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -340,6 +339,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -438,8 +442,8 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -447,6 +451,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -505,8 +514,8 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -514,6 +523,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -632,8 +646,8 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -641,6 +655,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -719,7 +738,7 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
-                          if ! command -v vault >/dev/null 2>&1; then
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -727,6 +746,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -901,7 +925,7 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
-                          if ! command -v vault >/dev/null 2>&1; then
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -909,6 +933,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -989,8 +1018,8 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -998,6 +1027,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -1099,8 +1133,8 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -1108,6 +1142,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -1256,7 +1295,7 @@ pipeline:
                           fi
 
                           # Vault CLI
-                          command -v vault >/dev/null || {
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -1264,8 +1303,13 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
-                          }
+                          fi
                           export PATH="/tmp:$PATH"
 
                           # Packer (arch-aware, no unzip required)
@@ -1533,8 +1577,8 @@ pipeline:
                           fi
 
                           # Install Vault
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -1542,6 +1586,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -1837,7 +1886,7 @@ pipeline:
                           fi
 
                           # Install Vault CLI
-                          if ! command -v vault >/dev/null 2>&1; then
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -1845,6 +1894,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -2043,8 +2097,8 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -2052,6 +2106,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -2131,8 +2190,8 @@ pipeline:
                             microdnf install -y jq unzip wget || true
                           fi
 
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -2140,6 +2199,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -2337,8 +2401,8 @@ pipeline:
                           ansible --version | head -1
 
                           # Install Vault CLI
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -2346,6 +2410,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -2478,8 +2547,8 @@ pipeline:
                           fi
 
                           # Install Vault CLI
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -2487,6 +2556,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -2698,8 +2772,8 @@ pipeline:
                           fi
 
                           # Install Vault CLI
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -2707,6 +2781,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -2862,8 +2941,8 @@ pipeline:
                           ansible --version | head -1
 
                           # Install Vault CLI
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -2871,6 +2950,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
@@ -3077,8 +3161,8 @@ pipeline:
                           fi
 
                           # Install Vault CLI
-                          # Install Vault (arch-aware, no unzip/python required)
-                          if ! command -v vault >/dev/null 2>&1; then
+                          # Install Vault (always verify binary is valid)
+                          if ! /tmp/vault version >/dev/null 2>&1; then
                             echo "Installing Vault..."
                             ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && ARCH="arm64" || ARCH="amd64"
                             rm -f /tmp/vault /tmp/vault.zip
@@ -3086,6 +3170,11 @@ pipeline:
                             HDR_OFFSET=63
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
+                            if ! /tmp/vault version >/dev/null 2>&1; then
+                              echo "✗ Vault binary invalid after extraction"
+                              ls -la /tmp/vault
+                              exit 1
+                            fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
                           export PATH="/tmp:$PATH"
