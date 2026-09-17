@@ -145,9 +145,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           echo "✓ Dependencies installed"
                           echo "Fetching HCP Terraform token from Vault..."
@@ -332,9 +332,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
                           WORKSPACE_ID="ws-uGtV1DEBnULDJwzf"
@@ -438,9 +438,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
 
@@ -504,9 +504,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           # Check if network already exists with all required fields
                           EXISTING_VPC=$(vault kv get -field=vpc_id secret/ami-pipeline/network 2>/dev/null || true)
@@ -630,9 +630,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           # Skip if RUN_ID is "SKIP"
                           if [ "$RUN_ID" = "SKIP" ]; then
@@ -715,9 +715,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
                           PIPELINE_URL="https://app.harness.io/ng/account/<+account.identifier>/module/cd/orgs/<+org.identifier>/projects/<+project.identifier>/pipelines/<+pipeline.identifier>/executions/<+pipeline.executionId>/pipeline"
@@ -896,9 +896,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
 
@@ -984,9 +984,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
 
@@ -1093,9 +1093,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           # Check if network already exists with all required fields
                           EXISTING_VPC=$(vault kv get -field=vpc_id secret/ami-pipeline/network 2>/dev/null || true)
@@ -1248,9 +1248,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           }
+                          export PATH="/tmp:$PATH"
 
                           # Packer (arch-aware, no unzip required)
                           if ! command -v packer >/dev/null 2>&1; then
@@ -1261,8 +1261,8 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/packer.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/packer.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/packer 2>/dev/null || true
                             chmod +x /tmp/packer
-                            export PATH="/tmp:$PATH"
                           fi
+                          export PATH="/tmp:$PATH"
                           packer --version
 
                           # Credentials - Dynamic from Vault AWS Secrets Engine
@@ -1525,9 +1525,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           echo "✓ Dependencies installed"
 
@@ -1827,9 +1827,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
 
@@ -2033,9 +2033,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
 
@@ -2120,9 +2120,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           HCP_TOKEN=$(vault kv get -field=token secret/ami-pipeline/hcp-terraform)
 
@@ -2325,9 +2325,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           # Read GitHub token from Vault
                           GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
@@ -2465,9 +2465,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           # Get GitHub token from Vault
                           GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
@@ -2684,9 +2684,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           # Read GitHub token from Vault
                           GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
@@ -2847,9 +2847,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           # Read GitHub token from Vault
                           GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
@@ -3061,9 +3061,9 @@ pipeline:
                             HDR_OFFSET=$(perl -e 'open(F,"<:raw","/tmp/vault.zip");read(F,$h,4);read(F,$h,26);my($v,$f,$c,$mt,$md,$crc,$cs,$us,$fn,$ex)=unpack("vvvvvVVVvv",$h);print 30+$fn+$ex;')
                             dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
                             chmod +x /tmp/vault
-                            export PATH="/tmp:$PATH"
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
                           fi
+                          export PATH="/tmp:$PATH"
 
                           # Read GitHub token from Vault
                           GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
