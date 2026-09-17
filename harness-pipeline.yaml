@@ -144,11 +144,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -337,11 +340,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -449,11 +455,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -521,11 +530,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -653,11 +665,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -744,11 +759,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -931,11 +949,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -1025,11 +1046,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -1140,11 +1164,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -1301,11 +1328,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -1319,7 +1349,11 @@ pipeline:
                             rm -f /tmp/packer /tmp/packer.zip
                             curl -sL "https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_${ARCH}.zip" -o /tmp/packer.zip
                             HDR_OFFSET=50
-                            dd if=/tmp/packer.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/packer 2>/dev/null || true
+                            dd if=/tmp/packer.zip bs=1 skip=$HDR_OFFSET of=/tmp/packer.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/packer.gz
+                            cat /tmp/packer.deflate >> /tmp/packer.gz
+                            gzip -d < /tmp/packer.gz > /tmp/packer 2>/dev/null || true
+                            rm -f /tmp/packer.deflate /tmp/packer.gz
                             chmod +x /tmp/packer
                           fi
                           export PATH="/tmp:$PATH"
@@ -1584,11 +1618,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -1892,11 +1929,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -2104,11 +2144,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -2197,11 +2240,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -2408,11 +2454,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -2554,11 +2603,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -2779,11 +2831,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -2948,11 +3003,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
@@ -3168,11 +3226,14 @@ pipeline:
                             rm -f /tmp/vault /tmp/vault.zip
                             curl -sL "https://releases.hashicorp.com/vault/1.15.0/vault_1.15.0_linux_${ARCH}.zip" -o /tmp/vault.zip
                             HDR_OFFSET=63
-                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET 2>/dev/null | gzip -d > /tmp/vault 2>/dev/null || true
+                            dd if=/tmp/vault.zip bs=1 skip=$HDR_OFFSET of=/tmp/vault.deflate 2>/dev/null
+                            printf "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" > /tmp/vault.gz
+                            cat /tmp/vault.deflate >> /tmp/vault.gz
+                            gzip -d < /tmp/vault.gz > /tmp/vault 2>/dev/null || true
+                            rm -f /tmp/vault.deflate /tmp/vault.gz
                             chmod +x /tmp/vault
                             if ! /tmp/vault version >/dev/null 2>&1; then
-                              echo "✗ Vault binary invalid after extraction"
-                              ls -la /tmp/vault
+                              echo "✗ Vault binary invalid after extraction (size: $(wc -c < /tmp/vault))"
                               exit 1
                             fi
                             echo "✓ Vault installed: $(/tmp/vault version | head -1)"
