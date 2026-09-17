@@ -748,6 +748,13 @@ pipeline:
                           #!/bin/bash
                           set -e
                           echo "📝 Posting PR comment with console output..."
+
+                          # Skip for manual runs (no PR)
+                          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+                            echo "ℹ️  No PR number — skipping PR comment (manual run)"
+                            exit 0
+                          fi
+
                           export VAULT_ADDR="$vault_addr"
                           export VAULT_TOKEN="$vault_token"
                           export VAULT_SKIP_VERIFY="true"
@@ -783,6 +790,8 @@ pipeline:
                           # Detect new EC2 environments by comparing PR branch .auto.tfvars files with Vault
                           GITHUB_TOKEN=$(vault kv get -field=token secret/ami-pipeline/github)
                           PR_HEAD_REF="<+trigger.sourceBranch>"
+                          # Default to main for manual runs
+                          [ -z "$PR_HEAD_REF" ] || [ "$PR_HEAD_REF" = "null" ] && PR_HEAD_REF="main"
 
                           # Clone the PR branch to check for .auto.tfvars files
                           rm -rf /tmp/infra_check
@@ -938,6 +947,13 @@ pipeline:
                           #!/bin/bash
                           set -e
                           echo "🔍 Checking GitHub PR approval status..."
+
+                          # Skip for manual runs (no PR)
+                          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+                            echo "ℹ️  No PR number — skipping approval check (manual run)"
+                            exit 0
+                          fi
+
                           export VAULT_ADDR="$vault_addr"
                           export VAULT_TOKEN="$vault_token"
                           export VAULT_SKIP_VERIFY="true"
